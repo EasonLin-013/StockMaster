@@ -2,142 +2,218 @@
 @using System.Text.Json
 @inject HttpClient Http
 
-<PageTitle>即時查詢系統</PageTitle>
+<PageTitle>System Data Terminal</PageTitle>
 
-<div class="container mt-4">
-    <div class="text-center mb-4">
-        <h2 class="fw-bold text-primary">StockMaster</h2>
-    </div>
-
-    @* 查詢列 *@
-    <div class="row justify-content-center mb-4">
-        <div class="col-md-8">
-            <div class="input-group shadow-sm">
-                <input @bind="stockInput" @bind:event="oninput" @onkeyup="HandleKeyUp"
-                       placeholder="輸入代碼，多筆請用逗號隔開 (如: 2330, 2317)" class="form-control" />
-                <button class="btn btn-primary" @onclick="GetStocks" disabled="@loading">
-                    @if (loading) { <span class="spinner-border spinner-border-sm"></span> }
-                    else { <span>查詢</span> }
-                </button>
-            </div>
-        </div>
-    </div>
-
-    @* 股票卡片清單 *@
-    @if (stockList.Any())
-    {
-        @foreach (var s in stockList)
+<div class="terminal-container">
+    <div class="input-group">
+        <span class="prompt">></span>
+        <input @bind="stockCode" 
+               @onkeyup="HandleKeyUp" 
+               placeholder="Query ID..." 
+               class="minimal-input" />
+        <button @onclick="QueryStock" class="minimal-btn">RUN_QUERY</button>
+        
+        @if (isLoading)
         {
-            <div class="card shadow-sm mb-4 border-0">
-                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0 fw-bold">代碼：@s.Symbol</h5>
-                    <span class="badge bg-secondary">最後更新：@s.Time</span>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-bordered mb-0 text-center align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="width: 10%">類別</th>
-                                @for (int i = 1; i <= 5; i++) { <th>第 @i 檔</th> }
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @* 賣出列 (Ask) *@
-                            <tr class="table-success" style="--bs-table-bg: #f5fff5;">
-                                <td class="fw-bold text-success">賣出</td>
-                                @for (int i = 0; i < 5; i++)
-                                {
-                                    <td>
-                                        <div class="fw-bold text-success">@GetIdx(s.SellPrices, i)</div>
-                                        <div class="small text-muted">量: @GetIdx(s.SellQty, i)</div>
-                                    </td>
-                                }
-                            </tr>                            
-                            @* 買進列 (Bid) *@
-                            <tr class="table-danger" style="--bs-table-bg: #fff5f5;">
-                                <td class="fw-bold text-danger">買進</td>
-                                @for (int i = 0; i < 5; i++)
-                                {
-                                    <td>
-                                        <div class="fw-bold text-danger">@GetIdx(s.BuyPrices, i)</div>
-                                        <div class="small text-muted">量: @GetIdx(s.BuyQty, i)</div>
-                                    </td>
-                                }
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="card-footer bg-white border-top-0">
-                    <div class="row text-center fw-bold">
-                        <div class="col border-end">成交價: <span class="text-primary fs-5">@s.CurrentPrice</span></div>
-                        <div class="col border-end text-muted">昨收: @s.YesterdayClose</div>
-                        <div class="col border-end text-danger">最高: @s.High</div>
-                        <div class="col text-success">最低: @s.Low</div>
-                    </div>
-                </div>
-            </div>
+            <span class="status-tag">FETCHING_REMOTE_DATA...</span>
         }
+    </div>
+
+    @if (stockData != null)
+    {
+        <div class="results-area">
+            <div class="meta-panel">
+                <div class="meta-item">ENTRY_ID: @stockCode</div>
+                <div class="meta-item">INIT_S: @stockData.Open</div>
+                <div class="meta-item">MAX_V: @stockData.High</div>
+                <div class="meta-item">MIN_V: @stockData.Low</div>
+                <div class="meta-item highlight">CURR_V: @stockData.Close</div>
+                <div class="meta-item">VOL_U: @stockData.Volume</div>
+            </div>
+            
+            <div class="table-label">ORDER_BOOK_ANALYSIS</div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>RANK</th>
+                        <th>B_VAL (QTY)</th>
+                        <th>A_VAL (QTY)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (int i = 0; i < 5; i++)
+                    {
+                        <tr>
+                            <td class="index-col">#0@(i + 1)</td>
+                            <td>@FormatPrice(stockData.BidPrices, i) (@FormatVolume(stockData.BidVolumes, i))</td>
+                            <td>@FormatPrice(stockData.AskPrices, i) (@FormatVolume(stockData.AskVolumes, i))</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <div class="timestamp">SYNC_TIME: @DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")</div>
+        </div>
+    }
+    
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="error-log">ERR_SIG: @errorMessage</div>
     }
 </div>
 
-@code {
-    private string stockInput = "";
-    private bool loading = false;
-    private List<StockDisplay> stockList = new();
-
-    // Render 網址
-    private string apiBaseUrl = "https://stockmaster-te7f.onrender.com/api/stock/";
-
-    private async Task GetStocks()
-    {
-        if (string.IsNullOrWhiteSpace(stockInput)) return;
-        loading = true;
-        stockList.Clear();
-
-        var codes = stockInput.Replace(" ", "").TrimEnd(',');
-
-        try
-        {
-            var response = await Http.GetFromJsonAsync<JsonElement>($"{apiBaseUrl}{codes}");
-            if (response.TryGetProperty("msgArray", out var msgArray))
-            {
-                foreach (var item in msgArray.EnumerateArray())
-                {
-                    stockList.Add(new StockDisplay
-                    {
-                        Symbol = item.GetProperty("c").GetString(),
-                        CurrentPrice = item.GetProperty("z").GetString() ?? "市價中",
-                        High = item.GetProperty("h").GetString(),
-                        Low = item.GetProperty("l").GetString(),
-                        YesterdayClose = item.GetProperty("y").GetString(),
-                        Time = item.GetProperty("t").GetString(),
-                        // 證交所 API 的五檔是以 "_" 分隔的字串
-                        BuyPrices = item.GetProperty("b").GetString()?.Split('_'),
-                        BuyQty = item.GetProperty("g").GetString()?.Split('_'),
-                        SellPrices = item.GetProperty("a").GetString()?.Split('_'),
-                        SellQty = item.GetProperty("f").GetString()?.Split('_')
-                    });
-                }
-            }
-        }
-        catch (Exception ex) { Console.WriteLine($"Error: {ex.Message}"); }
-        finally { loading = false; }
+<style>
+    :global(body) {
+        background-color: #ffffff !important;
+        color: #444444 !important;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+        margin: 0;
+        padding: 0;
     }
 
-    private string GetIdx(string[]? arr, int i) => (arr != null && arr.Length > i && !string.IsNullOrEmpty(arr[i])) ? arr[i] : "-";
-    private void HandleKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") GetStocks(); }
+    .terminal-container {
+        padding: 12px;
+        font-size: 12px;
+    }
 
-    public class StockDisplay
+    .input-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 20px;
+    }
+
+    .prompt { color: #aaa; font-weight: bold; }
+
+    .minimal-input {
+        border: 1px solid #e0e0e0;
+        padding: 3px 6px;
+        outline: none;
+        width: 90px;
+        background: #fdfdfd;
+        font-family: inherit;
+    }
+
+    .minimal-btn {
+        background: #f5f5f5;
+        border: 1px solid #ddd;
+        padding: 3px 12px;
+        cursor: pointer;
+        font-size: 11px;
+        color: #666;
+        font-family: inherit;
+    }
+
+    .status-tag { color: #bbb; font-style: italic; margin-left: 10px; }
+
+    /* 基礎數據面板 */
+    .meta-panel {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        background: #fafafa;
+        padding: 10px;
+        border: 1px solid #eee;
+        margin-bottom: 15px;
+        max-width: 500px;
+    }
+
+    .meta-item { color: #666; font-size: 11px; }
+    .highlight { color: #333; font-weight: bold; }
+
+    .table-label {
+        font-size: 11px;
+        color: #999;
+        margin-bottom: 5px;
+        letter-spacing: 1px;
+    }
+
+    .data-table {
+        border-collapse: collapse;
+        width: 100%;
+        max-width: 500px;
+        border: 1px solid #eee;
+    }
+
+    .data-table th {
+        background: #f0f0f0;
+        text-align: left;
+        color: #777;
+        font-weight: normal;
+        padding: 6px;
+        border-bottom: 1px solid #eee;
+    }
+
+    .data-table td {
+        padding: 6px;
+        border-bottom: 1px solid #f9f9f9;
+        color: #555;
+    }
+
+    .index-col { color: #ccc; width: 50px; }
+
+    .timestamp {
+        margin-top: 10px;
+        font-size: 10px;
+        color: #bbb;
+    }
+
+    .error-log { color: #cc0000; margin-top: 10px; font-size: 11px; }
+</style>
+
+@code {
+    private string stockCode = "";
+    private StockData? stockData;
+    private bool isLoading = false;
+    private string errorMessage = "";
+    
+    // 請確保此處為你的 Render API 網址
+    private string apiBaseUrl = "https://stockmasterapi.onrender.com/api/stock/";
+
+    private async Task QueryStock()
     {
-        public string? Symbol { get; set; }
-        public string? CurrentPrice { get; set; }
-        public string? High { get; set; }
-        public string? Low { get; set; }
-        public string? YesterdayClose { get; set; }
-        public string? Time { get; set; }
-        public string[]? BuyPrices { get; set; }
-        public string[]? BuyQty { get; set; }
-        public string[]? SellPrices { get; set; }
-        public string[]? SellQty { get; set; }
+        if (string.IsNullOrWhiteSpace(stockCode)) return;
+
+        isLoading = true;
+        errorMessage = "";
+        try
+        {
+            stockData = await Http.GetFromJsonAsync<StockData>($"{apiBaseUrl}{stockCode}");
+        }
+        catch (Exception)
+        {
+            errorMessage = "REMOTE_SRV_TIMEOUT";
+            stockData = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") QueryStock();
+    }
+
+    private string FormatPrice(List<decimal>? list, int index) 
+        => (list != null && list.Count > index) ? list[index].ToString("F2") : "0.00";
+
+    private string FormatVolume(List<int>? list, int index) 
+        => (list != null && list.Count > index) ? list[index].ToString() : "0";
+
+    public class StockData
+    {
+        // 基礎數據
+        public decimal Open { get; set; }
+        public decimal High { get; set; }
+        public decimal Low { get; set; }
+        public decimal Close { get; set; }
+        public long Volume { get; set; }
+
+        // 五檔數據
+        public List<decimal> BidPrices { get; set; } = new();
+        public List<int> BidVolumes { get; set; } = new();
+        public List<decimal> AskPrices { get; set; } = new();
+        public List<int> AskVolumes { get; set; } = new();
     }
 }
