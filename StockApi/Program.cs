@@ -1,20 +1,26 @@
 var builder = WebApplication.CreateBuilder(args);
 
-// 解決 CORS：讓前端網頁可以連到這個 API
-builder.Services.AddCors(options => {
-    options.AddDefaultPolicy(policy => {
-        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+// 註冊 CORS 服務，允許跨來源存取
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
     });
 });
 
 builder.Services.AddControllers();
-builder.Services.AddHttpClient(); 
+builder.Services.AddHttpClient();
 
 var app = builder.Build();
 
+// 必須放在這裡：在 Routing 之後，Authorization 之前
+app.UseRouting();
 app.UseCors(); 
+app.UseAuthorization();
+
 app.MapControllers();
 
-// 設定 Render 雲端環境需要的 Port
-var port = Environment.GetEnvironmentVariable("PORT") ?? "10000";
-app.Run($"http://0.0.0.0:{port}");
+app.Run();
