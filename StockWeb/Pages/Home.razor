@@ -1,82 +1,87 @@
 @page "/"
 @using System.Text.Json
+@using Microsoft.AspNetCore.Components.WebAssembly.Hosting
 @inject HttpClient Http
 
-<PageTitle>System Terminal</PageTitle>
+<PageTitle>@(isSecretMode ? "System Terminal" : "股票即時查詢")</PageTitle>
 
-<div class="container mt-4" style="font-family: 'Consolas', 'Monaco', monospace; color: #444;">
-    <div class="mb-4 text-start">
-        <h5 class="fw-bold text-secondary">DATA_STREAM_v2.0</h5>
+<div class="container mt-4" style="font-family: @(isSecretMode ? "monospace" : "inherit");">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h5 class="fw-bold @(isSecretMode ? "text-secondary" : "text-primary")">
+            @(isSecretMode ? "DATA_STREAM_v2.0" : "StockMaster 查詢系統")
+        </h5>
+        @* 切換按鈕：低調風格 *@
+        <button class="btn btn-sm btn-outline-light text-muted border-0" @onclick="ToggleMode" style="font-size: 10px;">
+            [ @(isSecretMode ? "DECRYPT" : "ENCRYPT") ]
+        </button>
     </div>
 
-    @* 查詢列：偽裝成指令輸入 *@
+    @* 查詢列 *@
     <div class="row mb-4">
         <div class="col-md-6">
-            <div class="input-group input-group-sm">
-                <span class="input-group-text bg-white border-end-0 text-muted">CMD></span>
+            <div class="input-group input-group-sm shadow-sm">
+                <span class="input-group-text bg-white text-muted">@(isSecretMode ? "CMD>" : "代碼>")</span>
                 <input @bind="stockInput" @bind:event="oninput" @onkeyup="HandleKeyUp"
-                       placeholder="sys_id..." class="form-control border-start-0" />
-                <button class="btn btn-outline-secondary" @onclick="GetStocks" disabled="@loading">
+                       placeholder="@(isSecretMode ? "sys_id..." : "輸入代碼...")" class="form-control" />
+                <button class="btn @(isSecretMode ? "btn-outline-secondary" : "btn-primary")" @onclick="GetStocks" disabled="@loading">
                     @if (loading) { <span class="spinner-border spinner-border-sm"></span> }
-                    else { <span>EXECUTE</span> }
+                    else { <span>@(isSecretMode ? "EXEC" : "查詢")</span> }
                 </button>
             </div>
         </div>
     </div>
 
-    @* 數據清單 *@
     @if (stockList.Any())
     {
         @foreach (var s in stockList)
         {
-            <div class="mb-5" style="border-left: 3px solid #eee; padding-left: 15px;">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="fw-bold text-dark">[ID: @s.Symbol]</span>
-                    <span class="text-muted" style="font-size: 0.75rem;">TIMESTAMP: @s.Time</span>
+            <div class="card mb-4 border-0 @(isSecretMode ? "" : "shadow-sm")">
+                <div class="card-header @(isSecretMode ? "bg-light text-muted" : "bg-dark text-white") d-flex justify-content-between align-items-center">
+                    <span class="fw-bold">@(isSecretMode ? "ID: " : "代碼：")@s.Symbol</span>
+                    <span style="font-size: 0.75rem;">@(isSecretMode ? "SYNC: " : "更新：")@s.Time</span>
                 </div>
                 
                 <div class="table-responsive">
-                    <table class="table table-sm table-bordered text-center align-middle" style="font-size: 0.85rem; border-color: #f0f0f0;">
-                        <thead>
-                            <tr class="text-secondary" style="background-color: #fafafa;">
-                                <th style="width: 10%">TAG</th>
-                                @for (int i = 1; i <= 5; i++) { <th>L_0@i</th> }
+                    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.85rem;">
+                        <thead class="table-light">
+                            <tr class="text-secondary">
+                                <th style="width: 15%">@(isSecretMode ? "TAG" : "類別")</th>
+                                @for (int i = 1; i <= 5; i++) { <th>@(isSecretMode ? $"L_0{i}" : $"第 {i} 檔")</th> }
                             </tr>
                         </thead>
                         <tbody>
-                            @* 賣出列 (UI標籤 ASK) *@
-                            <tr>
-                                <td class="text-muted">ASK</td>
+                            @* 賣出列 (Ask) *@
+                            <tr style="background-color: @(isSecretMode ? "transparent" : "#f5fff5");">
+                                <td class="fw-bold @(isSecretMode ? "text-muted" : "text-success")">@(isSecretMode ? "ASK" : "賣出")</td>
                                 @for (int i = 0; i < 5; i++)
                                 {
                                     <td>
-                                        <div class="text-dark">@GetIdx(s.SellPrices, i)</div>
-                                        <div class="text-muted" style="font-size: 0.7rem;">(U:@GetIdx(s.SellQty, i))</div>
+                                        <div class="fw-bold @(isSecretMode ? "text-dark" : "text-success")">@GetIdx(s.SellPrices, i)</div>
+                                        <div class="text-muted" style="font-size: 0.7rem;">@(isSecretMode ? "(U:" : "量:")@GetIdx(s.SellQty, i)@(isSecretMode ? ")" : "")</div>
                                     </td>
                                 }
                             </tr>                             
-                            @* 買進列 (UI標籤 BID) *@
-                            <tr>
-                                <td class="text-muted">BID</td>
+                            @* 買進列 (Bid) *@
+                            <tr style="background-color: @(isSecretMode ? "transparent" : "#fff5f5");">
+                                <td class="fw-bold @(isSecretMode ? "text-muted" : "text-danger")">@(isSecretMode ? "BID" : "買進")</td>
                                 @for (int i = 0; i < 5; i++)
                                 {
                                     <td>
-                                        <div class="text-dark">@GetIdx(s.BuyPrices, i)</div>
-                                        <div class="text-muted" style="font-size: 0.7rem;">(U:@GetIdx(s.BuyQty, i))</div>
+                                        <div class="fw-bold @(isSecretMode ? "text-dark" : "text-danger")">@GetIdx(s.BuyPrices, i)</div>
+                                        <div class="text-muted" style="font-size: 0.7rem;">@(isSecretMode ? "(U:" : "量:")@GetIdx(s.BuyQty, i)@(isSecretMode ? ")" : "")</div>
                                     </td>
                                 }
                             </tr>
                         </tbody>
                     </table>
                 </div>
-
-                @* 底部數據 (UI標籤偽裝) *@
-                <div class="py-2" style="font-size: 0.8rem; border-bottom: 1px solid #f8f8f8;">
-                    <div class="row g-0 text-muted">
-                        <div class="col-auto me-4">CURR_V: <span class="text-dark">@s.CurrentPrice</span></div>
-                        <div class="col-auto me-4">PREV_C: @s.YesterdayClose</div>
-                        <div class="col-auto me-4">MAX_V: @s.High</div>
-                        <div class="col-auto">MIN_V: @s.Low</div>
+                <div class="card-footer bg-white border-top-0">
+                    <div class="row text-center fw-bold" style="font-size: 0.85rem;">
+                        <div class="col border-end">@(isSecretMode ? "CURR_V: " : "成交: ") <span class="@(isSecretMode ? "text-dark" : "text-primary")">@s.CurrentPrice</span></div>
+                        <div class="col border-end text-muted">@(isSecretMode ? "PREV_C: " : "昨收: ")@s.YesterdayClose</div>
+                        <div class="col border-end @(isSecretMode ? "text-muted" : "text-danger")">@(isSecretMode ? "MAX_V: " : "最高: ")@s.High</div>
+                        <div class="col @(isSecretMode ? "text-muted" : "text-success")">@(isSecretMode ? "MIN_V: " : "最低: ")@s.Low</div>
                     </div>
                 </div>
             </div>
@@ -87,22 +92,22 @@
 @code {
     private string stockInput = "";
     private bool loading = false;
+    private bool isSecretMode = true; // 預設為低調版 (Secret Mode)
     private List<StockDisplay> stockList = new();
 
-    // 沿用你原本能跑的網址
     private string apiBaseUrl = "https://stockmaster-te7f.onrender.com/api/stock/";
+
+    private void ToggleMode() => isSecretMode = !isSecretMode;
 
     private async Task GetStocks()
     {
         if (string.IsNullOrWhiteSpace(stockInput)) return;
         loading = true;
         stockList.Clear();
-
         var codes = stockInput.Replace(" ", "").TrimEnd(',');
 
         try
         {
-            // 維持 JsonElement 解析邏輯
             var response = await Http.GetFromJsonAsync<JsonElement>($"{apiBaseUrl}{codes}");
             if (response.TryGetProperty("msgArray", out var msgArray))
             {
