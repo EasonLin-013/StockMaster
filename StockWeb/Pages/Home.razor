@@ -2,77 +2,81 @@
 @using System.Text.Json
 @inject HttpClient Http
 
-<PageTitle>即時查詢系統</PageTitle>
+<PageTitle>System Terminal</PageTitle>
 
-<div class="container mt-4">
-    <div class="text-center mb-4">
-        <h2 class="fw-bold text-primary">StockMaster</h2>
+<div class="container mt-4" style="font-family: 'Consolas', 'Monaco', monospace; color: #444;">
+    <div class="mb-4 text-start">
+        <h5 class="fw-bold text-secondary">DATA_STREAM_v2.0</h5>
     </div>
 
-    @* 查詢列 *@
-    <div class="row justify-content-center mb-4">
-        <div class="col-md-8">
-            <div class="input-group shadow-sm">
+    @* 查詢列：偽裝成指令輸入 *@
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-white border-end-0 text-muted">CMD></span>
                 <input @bind="stockInput" @bind:event="oninput" @onkeyup="HandleKeyUp"
-                       placeholder="輸入代碼，多筆請用逗號隔開 (如: 2330, 2317)" class="form-control" />
-                <button class="btn btn-primary" @onclick="GetStocks" disabled="@loading">
+                       placeholder="sys_id..." class="form-control border-start-0" />
+                <button class="btn btn-outline-secondary" @onclick="GetStocks" disabled="@loading">
                     @if (loading) { <span class="spinner-border spinner-border-sm"></span> }
-                    else { <span>查詢</span> }
+                    else { <span>EXECUTE</span> }
                 </button>
             </div>
         </div>
     </div>
 
-    @* 股票卡片清單 *@
+    @* 數據清單 *@
     @if (stockList.Any())
     {
         @foreach (var s in stockList)
         {
-            <div class="card shadow-sm mb-4 border-0">
-                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0 fw-bold">代碼：@s.Symbol</h5>
-                    <span class="badge bg-secondary">最後更新：@s.Time</span>
+            <div class="mb-5" style="border-left: 3px solid #eee; padding-left: 15px;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-bold text-dark">[ID: @s.Symbol]</span>
+                    <span class="text-muted" style="font-size: 0.75rem;">TIMESTAMP: @s.Time</span>
                 </div>
+                
                 <div class="table-responsive">
-                    <table class="table table-bordered mb-0 text-center align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="width: 10%">類別</th>
-                                @for (int i = 1; i <= 5; i++) { <th>第 @i 檔</th> }
+                    <table class="table table-sm table-bordered text-center align-middle" style="font-size: 0.85rem; border-color: #f0f0f0;">
+                        <thead>
+                            <tr class="text-secondary" style="background-color: #fafafa;">
+                                <th style="width: 10%">TAG</th>
+                                @for (int i = 1; i <= 5; i++) { <th>L_0@i</th> }
                             </tr>
                         </thead>
                         <tbody>
-                            @* 賣出列 (Ask) *@
-                            <tr class="table-success" style="--bs-table-bg: #f5fff5;">
-                                <td class="fw-bold text-success">賣出</td>
+                            @* 賣出列 (UI標籤 ASK) *@
+                            <tr>
+                                <td class="text-muted">ASK</td>
                                 @for (int i = 0; i < 5; i++)
                                 {
                                     <td>
-                                        <div class="fw-bold text-success">@GetIdx(s.SellPrices, i)</div>
-                                        <div class="small text-muted">量: @GetIdx(s.SellQty, i)</div>
+                                        <div class="text-dark">@GetIdx(s.SellPrices, i)</div>
+                                        <div class="text-muted" style="font-size: 0.7rem;">(U:@GetIdx(s.SellQty, i))</div>
                                     </td>
                                 }
-                            </tr>                            
-                            @* 買進列 (Bid) *@
-                            <tr class="table-danger" style="--bs-table-bg: #fff5f5;">
-                                <td class="fw-bold text-danger">買進</td>
+                            </tr>                             
+                            @* 買進列 (UI標籤 BID) *@
+                            <tr>
+                                <td class="text-muted">BID</td>
                                 @for (int i = 0; i < 5; i++)
                                 {
                                     <td>
-                                        <div class="fw-bold text-danger">@GetIdx(s.BuyPrices, i)</div>
-                                        <div class="small text-muted">量: @GetIdx(s.BuyQty, i)</div>
+                                        <div class="text-dark">@GetIdx(s.BuyPrices, i)</div>
+                                        <div class="text-muted" style="font-size: 0.7rem;">(U:@GetIdx(s.BuyQty, i))</div>
                                     </td>
                                 }
                             </tr>
                         </tbody>
                     </table>
                 </div>
-                <div class="card-footer bg-white border-top-0">
-                    <div class="row text-center fw-bold">
-                        <div class="col border-end">成交價: <span class="text-primary fs-5">@s.CurrentPrice</span></div>
-                        <div class="col border-end text-muted">昨收: @s.YesterdayClose</div>
-                        <div class="col border-end text-danger">最高: @s.High</div>
-                        <div class="col text-success">最低: @s.Low</div>
+
+                @* 底部數據 (UI標籤偽裝) *@
+                <div class="py-2" style="font-size: 0.8rem; border-bottom: 1px solid #f8f8f8;">
+                    <div class="row g-0 text-muted">
+                        <div class="col-auto me-4">CURR_V: <span class="text-dark">@s.CurrentPrice</span></div>
+                        <div class="col-auto me-4">PREV_C: @s.YesterdayClose</div>
+                        <div class="col-auto me-4">MAX_V: @s.High</div>
+                        <div class="col-auto">MIN_V: @s.Low</div>
                     </div>
                 </div>
             </div>
@@ -85,7 +89,7 @@
     private bool loading = false;
     private List<StockDisplay> stockList = new();
 
-    // Render 網址
+    // 沿用你原本能跑的網址
     private string apiBaseUrl = "https://stockmaster-te7f.onrender.com/api/stock/";
 
     private async Task GetStocks()
@@ -98,6 +102,7 @@
 
         try
         {
+            // 維持 JsonElement 解析邏輯
             var response = await Http.GetFromJsonAsync<JsonElement>($"{apiBaseUrl}{codes}");
             if (response.TryGetProperty("msgArray", out var msgArray))
             {
@@ -106,12 +111,11 @@
                     stockList.Add(new StockDisplay
                     {
                         Symbol = item.GetProperty("c").GetString(),
-                        CurrentPrice = item.GetProperty("z").GetString() ?? "市價中",
+                        CurrentPrice = item.GetProperty("z").GetString() ?? "---",
                         High = item.GetProperty("h").GetString(),
                         Low = item.GetProperty("l").GetString(),
                         YesterdayClose = item.GetProperty("y").GetString(),
                         Time = item.GetProperty("t").GetString(),
-                        // 證交所 API 的五檔是以 "_" 分隔的字串
                         BuyPrices = item.GetProperty("b").GetString()?.Split('_'),
                         BuyQty = item.GetProperty("g").GetString()?.Split('_'),
                         SellPrices = item.GetProperty("a").GetString()?.Split('_'),
