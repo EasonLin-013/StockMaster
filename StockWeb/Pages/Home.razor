@@ -4,31 +4,27 @@
 
 <PageTitle>Data Terminal</PageTitle>
 
-<div class="terminal">
-    <div class="cmd-line">
-        <span class="prefix">USER@DB:~$</span>
-        <input @bind="stockCode" @onkeyup="HandleKeyUp" placeholder="system_id..." />
-        <button @onclick="QueryStock">EXEC</button>
+<div class="terminal-view">
+    <div class="input-section">
+        <span class="prefix">CMD></span>
+        <input @bind="stockCode" @onkeyup="HandleKeyUp" placeholder="sys_code..." />
+        <button @onclick="QueryStock">RUN</button>
     </div>
 
-    @if (rootData != null && rootData.msgArray.Any())
+    @if (rootData != null && rootData.msgArray != null && rootData.msgArray.Any())
     {
         var d = rootData.msgArray[0];
-        <div class="log-output">
-            <div class="info-row">
+        <div class="output-panel">
+            <div class="meta-row">
                 <span>[ID: @d.c]</span>
-                <span>[INIT_S: @d.o]</span>
-                <span>[MAX_V: @d.h]</span>
-                <span>[MIN_V: @d.l]</span>
-                <span class="highlight">[CURR_V: @d.z]</span>
-            </div>
+                <span>[INIT_S: @d.o]</span> <span>[MAX_V: @d.h]</span>  <span>[MIN_V: @d.l]</span>  <span class="bold">[CURR_V: @d.z]</span> </div>
 
-            <table class="grid">
+            <table class="data-grid">
                 <thead>
                     <tr>
                         <th>RANK</th>
-                        <th>BID_VAL (QTY)</th>
-                        <th>ASK_VAL (QTY)</th>
+                        <th>B_VAL (QTY)</th>
+                        <th>A_VAL (QTY)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -41,7 +37,7 @@
                     @for (int i = 0; i < 5; i++)
                     {
                         <tr>
-                            <td>#0@(i+1)</td>
+                            <td class="gray">#0@(i + 1)</td>
                             <td>@(GetVal(bPrices, i)) (@(GetVal(bQtys, i)))</td>
                             <td>@(GetVal(aPrices, i)) (@(GetVal(aQtys, i)))</td>
                         </tr>
@@ -53,17 +49,24 @@
 </div>
 
 <style>
-    :global(body) { background: #fff !important; color: #444 !important; font-family: monospace; }
-    .terminal { padding: 15px; font-size: 12px; }
-    .cmd-line { display: flex; gap: 5px; margin-bottom: 15px; }
-    input { border: 1px solid #ddd; padding: 2px 5px; width: 80px; font-family: inherit; }
-    button { background: #f0f0f0; border: 1px solid #ccc; cursor: pointer; font-size: 11px; }
-    .log-output { border-top: 1px solid #eee; padding-top: 10px; }
-    .info-row { margin-bottom: 10px; color: #666; display: flex; gap: 10px; flex-wrap: wrap; }
-    .highlight { font-weight: bold; color: #000; }
-    .grid { border-collapse: collapse; width: 100%; max-width: 450px; }
-    th { text-align: left; background: #f9f9f9; color: #888; padding: 4px; font-weight: normal; border: 1px solid #eee; }
-    td { padding: 4px; border: 1px solid #eee; }
+    :global(body) { 
+        background: #ffffff !important; 
+        color: #333 !important; 
+        font-family: 'Consolas', monospace; 
+    }
+    .terminal-view { padding: 15px; font-size: 12px; }
+    .input-section { margin-bottom: 20px; display: flex; gap: 5px; align-items: center; }
+    .prefix { color: #888; font-weight: bold; }
+    input { border: 1px solid #ddd; padding: 2px 5px; width: 80px; outline: none; }
+    button { background: #f0f0f0; border: 1px solid #ccc; padding: 2px 10px; cursor: pointer; font-size: 11px; }
+    
+    .meta-row { margin-bottom: 10px; color: #666; display: flex; gap: 15px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+    .bold { color: #000; font-weight: bold; }
+    .gray { color: #aaa; }
+
+    .data-grid { border-collapse: collapse; width: 100%; max-width: 400px; }
+    .data-grid th { text-align: left; background: #fafafa; color: #999; padding: 5px; font-weight: normal; border: 1px solid #eee; }
+    .data-grid td { padding: 5px; border: 1px solid #eee; color: #444; }
 </style>
 
 @code {
@@ -71,27 +74,30 @@
     private Root? rootData;
     private string apiBaseUrl = "https://stockmasterapi.onrender.com/api/stock/";
 
-    private async Task QueryStock() {
+    private async Task QueryStock()
+    {
         try {
-            // 直接抓取原始 JSON，不做複雜轉換，避免崩潰
+            // 維持原本的抓取方式，不強迫轉換成自定義類別
             rootData = await Http.GetFromJsonAsync<Root>($"{apiBaseUrl}{stockCode}");
-        } catch { /* 靜默處理錯誤 */ }
+        } catch {
+            // 靜默處理，不跳錯誤視窗
+        }
     }
 
     private void HandleKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") QueryStock(); }
     private string GetVal(string[]? arr, int i) => (arr != null && arr.Length > i) ? arr[i] : "0";
 
-    // 這裡的類別必須對應證交所原始的欄位名稱 (c, o, h, l, z...)
-    public class Root { public List<Msg> msgArray { get; set; } = new(); }
+    // 這些類別結構必須完全對應證交所原始 JSON 的名稱
+    public class Root { public List<Msg>? msgArray { get; set; } }
     public class Msg {
-        public string c { get; set; } = ""; // 代碼
-        public string o { get; set; } = ""; // 開盤
-        public string h { get; set; } = ""; // 最高
-        public string l { get; set; } = ""; // 最低
-        public string z { get; set; } = ""; // 現價
-        public string b { get; set; } = ""; // 買價
-        public string g { get; set; } = ""; // 買量
-        public string a { get; set; } = ""; // 賣價
-        public string f { get; set; } = ""; // 賣量
+        public string c { get; set; } = ""; // Code
+        public string o { get; set; } = ""; // Open
+        public string h { get; set; } = ""; // High
+        public string l { get; set; } = ""; // Low
+        public string z { get; set; } = ""; // Close
+        public string b { get; set; } = ""; // Bid Prices
+        public string g { get; set; } = ""; // Bid Vol
+        public string a { get; set; } = ""; // Ask Prices
+        public string f { get; set; } = ""; // Ask Vol
     }
 }
