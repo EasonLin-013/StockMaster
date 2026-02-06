@@ -2,9 +2,10 @@ name: Deploy Frontend to GitHub Pages
 
 on:
   push:
-    branches: [ main ] # 當 main 分支有更新時觸發
+    branches: [ main ]
     paths:
-      - 'StockWeb/**'    # 只有改到前端資料夾時才跑這個
+      - 'StockWeb/**'
+      - '.github/workflows/deploy-frontend.yml' # 腳本改動也觸發
 
 jobs:
   deploy:
@@ -15,21 +16,23 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: 8.0.x # 配合你的專案版本
+          dotnet-version: 8.0.x
 
       - name: Publish Frontend
+        # 這裡確保路徑正確
         run: dotnet publish StockWeb/StockWeb.csproj -c Release -o release
 
-      # 修正 GitHub Pages 的路徑問題 (SPA 重新整理 404 問題)
-      - name: Copy index.html to 404.html
+      - name: Fix Base Href and 404
         run: |
-          # 建立 404 頁面防止重新整理失效
-          cp release/wwwroot/index.html release/wwwroot/404.html
-          # 自動把 index.html 裡的 <base href="/" /> 換成 <base href="/StockMaster/" />
+          # 強制將 index.html 裡的 base href 替換為專案路徑
           sed -i 's/<base href="\/" \/>/<base href="\/StockMaster\/" \/>/g' release/wwwroot/index.html
+          # 複製 404.html 以支援 SPA 路由
+          cp release/wwwroot/index.html release/wwwroot/404.html
+          # 建立一個標記檔案確保知道是哪次部署
+          echo "Deploy time: $(date)" > release/wwwroot/deploy-info.txt
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: release/wwwroot # 要發佈的資料夾
-          branch: gh-pages        # 發佈到這個分支
+          folder: release/wwwroot
+          branch: gh-pages
