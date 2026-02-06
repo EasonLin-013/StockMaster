@@ -22,7 +22,11 @@ jobs:
 
       # 修正 GitHub Pages 的路徑問題 (SPA 重新整理 404 問題)
       - name: Copy index.html to 404.html
-        run: cp release/wwwroot/index.html release/wwwroot/404.html
+        run: |
+          # 建立 404 頁面防止重新整理失效
+          cp release/wwwroot/index.html release/wwwroot/404.html
+          # 自動把 index.html 裡的 <base href="/" /> 換成 <base href="/StockMaster/" />
+          sed -i 's/<base href="\/" \/>/<base href="\/StockMaster\/" \/>/g' release/wwwroot/index.html
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
