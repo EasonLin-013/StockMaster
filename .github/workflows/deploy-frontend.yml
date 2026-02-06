@@ -1,0 +1,31 @@
+name: Deploy Frontend to GitHub Pages
+
+on:
+  push:
+    branches: [ main ] # 當 main 分支有更新時觸發
+    paths:
+      - 'StockWeb/**'    # 只有改到前端資料夾時才跑這個
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 8.0.x # 配合你的專案版本
+
+      - name: Publish Frontend
+        run: dotnet publish StockWeb/StockWeb.csproj -c Release -o release
+
+      # 修正 GitHub Pages 的路徑問題 (SPA 重新整理 404 問題)
+      - name: Copy index.html to 404.html
+        run: cp release/wwwroot/index.html release/wwwroot/404.html
+
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: release/wwwroot # 要發佈的資料夾
+          branch: gh-pages        # 發佈到這個分支
