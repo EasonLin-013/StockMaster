@@ -1,13 +1,14 @@
-@page "/"
+﻿@page "/"
 @using System.Text.Json
 @inject HttpClient Http
 
 <PageTitle>@(isSecretMode ? "System Terminal" : "股票即時查詢")</PageTitle>
 
-<div class="container-fluid py-3 px-2 px-md-4" style="font-family: @(isSecretMode ? "monospace" : "inherit"); max-width: 1000px; margin: 0 auto;">
+@* 將 container-fluid 的 padding 拿掉，改由自定義 CSS 控制 *@
+<div class="container-fluid custom-container" style="font-family: @(isSecretMode ? "monospace" : "inherit"); margin: 0 auto;">
     
     @* 頂部標題與模式切換 *@
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 mt-3">
         <h6 class="fw-bold mb-0 @(isSecretMode ? "text-secondary" : "text-primary")">
             @(isSecretMode ? "DATA_STREAM_v2.0" : "StockMaster")
         </h6>
@@ -16,15 +17,15 @@
         </button>
     </div>
 
-    @* 查詢區域：手機端自動填滿 *@
+    @* 查詢區域 *@
     <div class="row mb-4 g-2 justify-content-center">
-        <div class="col-12 col-md-8">
+        <div class="col-12">
             <div class="input-group shadow-sm">
                 <span class="input-group-text bg-white text-muted d-none d-sm-block">@(isSecretMode ? "CMD>" : "代碼>")</span>
                 <input @bind="stockInput" @bind:event="oninput" @onkeyup="HandleKeyUp"
                        type="text" inputmode="text"
                        placeholder="@(isSecretMode ? "sys_id..." : "輸入代碼,用逗號隔開")" 
-                       class="form-control" style="font-size: 16px;" /> @* 16px 防止 iOS 自動縮放 *@
+                       class="form-control" style="font-size: 16px;" />
                 <button class="btn @(isSecretMode ? "btn-outline-secondary" : "btn-primary") px-4" @onclick="GetStocks" disabled="@loading">
                     @if (loading) { <span class="spinner-border spinner-border-sm"></span> }
                     else { <span>@(isSecretMode ? "EXEC" : "查詢")</span> }
@@ -47,7 +48,7 @@
                             <span style="font-size: 0.7rem; opacity: 0.8;">@s.Time</span>
                         </div>
                         
-                        @* 表格內容：添加 table-responsive 確保手機不破版 *@
+                        @* 表格內容 *@
                         <div class="table-responsive" style="-webkit-overflow-scrolling: touch;">
                             <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.8rem; min-width: 350px;">
                                 <thead class="table-light">
@@ -79,23 +80,23 @@
                             </table>
                         </div>
 
-                        @* 底部關鍵數據：手機端自動換行 *@
-                        <div class="card-footer bg-white border-top-0 py-3">
-                            <div class="row g-2 text-center" style="font-size: 0.85rem;">
-                                <div class="col-6 col-md-3 border-end">
-                                    <small class="d-block text-muted">@(isSecretMode ? "CURR" : "成交")</small>
+                        @* 底部關鍵數據 *@
+                        <div class="card-footer bg-white border-top-0 py-3 px-1">
+                            <div class="row g-0 text-center" style="font-size: 0.85rem;">
+                                <div class="col-3 border-end">
+                                    <small class="d-block text-muted" style="font-size: 0.7rem;">@(isSecretMode ? "CURR" : "成交")</small>
                                     <span class="fw-bold @(isSecretMode ? "text-dark" : "text-primary")">@s.CurrentPrice</span>
                                 </div>
-                                <div class="col-6 col-md-3 border-end-md">
-                                    <small class="d-block text-muted">@(isSecretMode ? "PREV" : "昨收")</small>
+                                <div class="col-3 border-end">
+                                    <small class="d-block text-muted" style="font-size: 0.7rem;">@(isSecretMode ? "PREV" : "昨收")</small>
                                     <span>@s.YesterdayClose</span>
                                 </div>
-                                <div class="col-6 col-md-3 border-end">
-                                    <small class="d-block text-muted">@(isSecretMode ? "MAX" : "最高")</small>
+                                <div class="col-3 border-end">
+                                    <small class="d-block text-muted" style="font-size: 0.7rem;">@(isSecretMode ? "MAX" : "最高")</small>
                                     <span class="@(isSecretMode ? "" : "text-danger")">@s.High</span>
                                 </div>
-                                <div class="col-6 col-md-3">
-                                    <small class="d-block text-muted">@(isSecretMode ? "MIN" : "最低")</small>
+                                <div class="col-3">
+                                    <small class="d-block text-muted" style="font-size: 0.7rem;">@(isSecretMode ? "MIN" : "最低")</small>
                                     <span class="@(isSecretMode ? "" : "text-success")">@s.Low</span>
                                 </div>
                             </div>
@@ -108,16 +109,26 @@
 </div>
 
 <style>
-    /* 手機端微調 */
-    @@media (max-width: 576px) {
-        .container-fluid { padding-top: 10px !important; }
-        .table-sm td, .table-sm th { padding: 4px 2px !important; }
-        .border-end-md { border-right: none !important; }
+    /* 核心調整：強制手機版寬度為 98% */
+    .custom-container {
+        width: 98% !important;
+        padding-left: 1% !important;
+        padding-right: 1% !important;
+        max-width: 100% !important;
     }
-    
-    /* 電腦端保持邊界 */
-    @@media (min-width: 768px) {
-        .border-end-md { border-right: 1px solid #dee2e6 !important; }
+
+    /* 電腦版維持最大寬度限制，避免過寬難以閱讀 */
+    @@media (min-width: 1200px) {
+        .custom-container {
+            max-width: 1000px !important;
+        }
+    }
+
+    /* 手機端細節縮減 */
+    @@media (max-width: 576px) {
+        .card-header { padding: 8px 10px !important; }
+        .table-sm td, .table-sm th { padding: 4px 1px !important; }
+        .card-footer .col-3 { padding: 0 2px !important; }
     }
 </style>
 
