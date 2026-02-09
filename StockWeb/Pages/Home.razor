@@ -4,7 +4,6 @@
 
 <PageTitle>@(isSecretMode ? "System Terminal" : "股票即時查詢")</PageTitle>
 
-@* 將 container-fluid 的 padding 拿掉，改由自定義 CSS 控制 *@
 <div class="container-fluid custom-container" style="font-family: @(isSecretMode ? "monospace" : "inherit"); margin: 0 auto;">
     
     @* 頂部標題與模式切換 *@
@@ -18,15 +17,14 @@
     </div>
 
     @* 查詢區域 *@
-    <div class="row mb-4 g-2 justify-content-center">
+    <div class="row mb-3 g-2">
         <div class="col-12">
             <div class="input-group shadow-sm">
-                <span class="input-group-text bg-white text-muted d-none d-sm-block">@(isSecretMode ? "CMD>" : "代碼>")</span>
                 <input @bind="stockInput" @bind:event="oninput" @onkeyup="HandleKeyUp"
-                       type="text" inputmode="text"
-                       placeholder="@(isSecretMode ? "sys_id..." : "輸入代碼,用逗號隔開")" 
+                       type="text" 
+                       placeholder="@(isSecretMode ? "sys_id..." : "輸入代碼...")" 
                        class="form-control" style="font-size: 16px;" />
-                <button class="btn @(isSecretMode ? "btn-outline-secondary" : "btn-primary") px-4" @onclick="GetStocks" disabled="@loading">
+                <button class="btn @(isSecretMode ? "btn-outline-secondary" : "btn-primary") px-3" @onclick="GetStocks" disabled="@loading">
                     @if (loading) { <span class="spinner-border spinner-border-sm"></span> }
                     else { <span>@(isSecretMode ? "EXEC" : "查詢")</span> }
                 </button>
@@ -34,82 +32,75 @@
         </div>
     </div>
 
-    @* 數據列表 *@
     @if (stockList.Any())
     {
-        <div class="row row-cols-1 g-3">
-            @foreach (var s in stockList)
-            {
-                <div class="col">
-                    <div class="card border-0 @(isSecretMode ? "border-start" : "shadow-sm")">
-                        @* 卡片頭部 *@
-                        <div class="card-header @(isSecretMode ? "bg-light text-muted" : "bg-dark text-white") py-2 d-flex justify-content-between align-items-center">
-                            <span class="fw-bold">@(isSecretMode ? "ID: " : "代碼: ")@s.Symbol</span>
-                            <span style="font-size: 0.7rem; opacity: 0.8;">@s.Time</span>
-                        </div>
-                        
-                        @* 表格內容 *@
-                        <div class="table-responsive" style="-webkit-overflow-scrolling: touch;">
-                            <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.8rem; min-width: 350px;">
-                                <thead class="table-light">
-                                    <tr class="text-secondary" style="font-size: 0.7rem;">
-                                        <th style="width: 15%">TAG</th>
-                                        @for (int i = 1; i <= 5; i++) { <th>L@(i)</th> }
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr style="background-color: @(isSecretMode ? "transparent" : "#f5fff5");">
-                                        <td class="fw-bold @(isSecretMode ? "text-muted" : "text-success")">ASK</td>
-                                        @for (int i = 0; i < 5; i++) {
-                                            <td>
-                                                <div class="fw-bold">@GetIdx(s.SellPrices, i)</div>
-                                                <div class="text-muted" style="font-size: 0.65rem;">(@GetIdx(s.SellQty, i))</div>
-                                            </td>
-                                        }
-                                    </tr>                             
-                                    <tr style="background-color: @(isSecretMode ? "transparent" : "#fff5f5");">
-                                        <td class="fw-bold @(isSecretMode ? "text-muted" : "text-danger")">BID</td>
-                                        @for (int i = 0; i < 5; i++) {
-                                            <td>
-                                                <div class="fw-bold">@GetIdx(s.BuyPrices, i)</div>
-                                                <div class="text-muted" style="font-size: 0.65rem;">(@GetIdx(s.BuyQty, i))</div>
-                                            </td>
-                                        }
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
+        @foreach (var s in stockList)
+        {
+            <div class="card border-0 mb-3 @(isSecretMode ? "border-start" : "shadow-sm")">
+                <div class="card-header @(isSecretMode ? "bg-light text-muted" : "bg-dark text-white") py-2 d-flex justify-content-between align-items-center px-2">
+                    <span class="fw-bold" style="font-size: 0.85rem;">@(isSecretMode ? "ID: " : "代碼: ")@s.Symbol</span>
+                    <span style="font-size: 0.65rem; opacity: 0.8;">@s.Time</span>
+                </div>
+                
+                @* 關鍵：移除 min-width，強制表格自適應 *@
+                <div class="table-responsive" style="overflow-x: hidden;"> @* 隱藏捲軸，強制內容塞入 *@
+                    <table class="table table-sm table-bordered text-center align-middle mb-0 custom-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 12%">T</th>
+                                @for (int i = 1; i <= 5; i++) { <th>L@(i)</th> }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="background-color: @(isSecretMode ? "transparent" : "#f5fff5");">
+                                <td class="fw-bold @(isSecretMode ? "text-muted" : "text-success")">A</td>
+                                @for (int i = 0; i < 5; i++) {
+                                    <td>
+                                        <div class="price-text">@GetIdx(s.SellPrices, i)</div>
+                                        <div class="qty-text">@GetIdx(s.SellQty, i)</div>
+                                    </td>
+                                }
+                            </tr>                             
+                            <tr style="background-color: @(isSecretMode ? "transparent" : "#fff5f5");">
+                                <td class="fw-bold @(isSecretMode ? "text-muted" : "text-danger")">B</td>
+                                @for (int i = 0; i < 5; i++) {
+                                    <td>
+                                        <div class="price-text">@GetIdx(s.BuyPrices, i)</div>
+                                        <div class="qty-text">@GetIdx(s.BuyQty, i)</div>
+                                    </td>
+                                }
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
 
-                        @* 底部關鍵數據 *@
-                        <div class="card-footer bg-white border-top-0 py-3 px-1">
-                            <div class="row g-0 text-center" style="font-size: 0.85rem;">
-                                <div class="col-3 border-end">
-                                    <small class="d-block text-muted" style="font-size: 0.7rem;">@(isSecretMode ? "CURR" : "成交")</small>
-                                    <span class="fw-bold @(isSecretMode ? "text-dark" : "text-primary")">@s.CurrentPrice</span>
-                                </div>
-                                <div class="col-3 border-end">
-                                    <small class="d-block text-muted" style="font-size: 0.7rem;">@(isSecretMode ? "PREV" : "昨收")</small>
-                                    <span>@s.YesterdayClose</span>
-                                </div>
-                                <div class="col-3 border-end">
-                                    <small class="d-block text-muted" style="font-size: 0.7rem;">@(isSecretMode ? "MAX" : "最高")</small>
-                                    <span class="@(isSecretMode ? "" : "text-danger")">@s.High</span>
-                                </div>
-                                <div class="col-3">
-                                    <small class="d-block text-muted" style="font-size: 0.7rem;">@(isSecretMode ? "MIN" : "最低")</small>
-                                    <span class="@(isSecretMode ? "" : "text-success")">@s.Low</span>
-                                </div>
-                            </div>
+                <div class="card-footer bg-white border-top-0 py-2 px-1">
+                    <div class="row g-0 text-center footer-stats">
+                        <div class="col-3 border-end">
+                            <div class="f-label">@(isSecretMode ? "CUR" : "現")</div>
+                            <div class="f-val fw-bold @(isSecretMode ? "" : "text-primary")">@s.CurrentPrice</div>
+                        </div>
+                        <div class="col-3 border-end">
+                            <div class="f-label">@(isSecretMode ? "PRE" : "昨")</div>
+                            <div class="f-val">@s.YesterdayClose</div>
+                        </div>
+                        <div class="col-3 border-end">
+                            <div class="f-label">@(isSecretMode ? "MAX" : "高")</div>
+                            <div class="f-val @(isSecretMode ? "" : "text-danger")">@s.High</div>
+                        </div>
+                        <div class="col-3">
+                            <div class="f-label">@(isSecretMode ? "MIN" : "低")</div>
+                            <div class="f-val @(isSecretMode ? "" : "text-success")">@s.Low</div>
                         </div>
                     </div>
                 </div>
-            }
-        </div>
+            </div>
+        }
     }
 </div>
 
 <style>
-    /* 核心調整：強制手機版寬度為 98% */
+    /* 強制寬度佈局 */
     .custom-container {
         width: 98% !important;
         padding-left: 1% !important;
@@ -117,18 +108,36 @@
         max-width: 100% !important;
     }
 
-    /* 電腦版維持最大寬度限制，避免過寬難以閱讀 */
-    @@media (min-width: 1200px) {
-        .custom-container {
-            max-width: 1000px !important;
-        }
+    /* 表格內部擠壓優化 */
+    .custom-table {
+        table-layout: fixed; /* 強制固定比例，防止欄位被撐開 */
+        width: 100%;
+        font-size: 0.75rem; /* 稍微縮小字體 */
     }
 
-    /* 手機端細節縮減 */
-    @@media (max-width: 576px) {
-        .card-header { padding: 8px 10px !important; }
-        .table-sm td, .table-sm th { padding: 4px 1px !important; }
-        .card-footer .col-3 { padding: 0 2px !important; }
+    .custom-table th, .custom-table td {
+        padding: 4px 0px !important; /* 移除水平 Padding */
+        overflow: hidden;
+        white-space: nowrap;
+    }
+
+    .price-text {
+        font-weight: bold;
+        letter-spacing: -0.5px; /* 緊縮字距 */
+    }
+
+    .qty-text {
+        font-size: 0.6rem;
+        color: #999;
+    }
+
+    /* 頁尾數據優化 */
+    .footer-stats .f-label { font-size: 0.6rem; color: #aaa; margin-bottom: -2px; }
+    .footer-stats .f-val { font-size: 0.8rem; }
+
+    @@media (min-width: 1200px) {
+        .custom-container { max-width: 1000px !important; }
+        .custom-table { font-size: 0.85rem; }
     }
 </style>
 
