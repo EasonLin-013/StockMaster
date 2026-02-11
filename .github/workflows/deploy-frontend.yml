@@ -26,17 +26,22 @@ jobs:
 
       - name: Fix Base Href and 404 and Add NoJekyll
         run: |
-          # 1. 強制將 index.html 裡的 base href 替換為 GitHub Pages 的專案路徑
-          sed -i 's/<base href="\/" \/>/<base href="\/StockMaster\/" \/>/g' release/wwwroot/index.html
+          cd release/wwwroot
           
-          # 2. 複製 index.html 為 404.html，支援 Blazor SPA 的前端路由（避免重新整理時 404）
-          cp release/wwwroot/index.html release/wwwroot/404.html
+          # 1. 建立 .nojekyll
+          touch .nojekyll
           
-          # 3. 【核心步驟】建立 .nojekyll 檔案，告訴 GitHub Pages 不要使用 Jekyll 引擎處理
-          # 這樣才能正確讀取以底線開頭的資料夾（如 _framework）
-          touch release/wwwroot/.nojekyll
+          # 2. 強制寫入正確的 base href (注意：這裡直接取代含有 base href 的那一整行)
+          sed -i '/<base href=/c\    <base href="/StockMaster/" />' index.html
           
-          # 4. 建立部署時間標記，方便確認是否部署成功
+          # 3. 複製成 404.html
+          cp index.html 404.html
+          
+          # 4. 【除錯用】列出所有檔案，讓我們確定它們在根目錄
+          echo "Listing files in deployment folder:"
+          ls -la
+          
+          # 5. 建立部署時間標記，方便確認是否部署成功
           echo "Deploy time: $(date)" > release/wwwroot/deploy-info.txt
 
       - name: Deploy to GitHub Pages
