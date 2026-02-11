@@ -3,15 +3,17 @@ name: Deploy Frontend to GitHub Pages
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'StockWeb/**'
-      - '.github/workflows/deploy-frontend.yml' # 腳本改動也觸發
+  # 只有當 StockWeb 資料夾或此 yml 檔案變動時才觸發，節省資源
+  paths:
+    - 'StockWeb/**'
+    - '.github/workflows/deploy-frontend.yml'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
@@ -19,20 +21,26 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Publish Frontend
-        # 這裡確保路徑正確
+        # 將 Blazor 專案編譯並輸出到 release 資料夾
         run: dotnet publish StockWeb/StockWeb.csproj -c Release -o release
 
-      - name: Fix Base Href and 404
+      - name: Fix Base Href and 404 and Add NoJekyll
         run: |
-          # 強制將 index.html 裡的 base href 替換為專案路徑
+          # 1. 強制將 index.html 裡的 base href 替換為 GitHub Pages 的專案路徑
           sed -i 's/<base href="\/" \/>/<base href="\/StockMaster\/" \/>/g' release/wwwroot/index.html
-          # 複製 404.html 以支援 SPA 路由
+          
+          # 2. 複製 index.html 為 404.html，支援 Blazor SPA 的前端路由（避免重新整理時 404）
           cp release/wwwroot/index.html release/wwwroot/404.html
-          # 建立一個標記檔案確保知道是哪次部署
+          
+          # 3. 【核心步驟】建立 .nojekyll 檔案，告訴 GitHub Pages 不要使用 Jekyll 引擎處理
+          # 這樣才能正確讀取以底線開頭的資料夾（如 _framework）
+          touch release/wwwroot/.nojekyll
+          
+          # 4. 建立部署時間標記，方便確認是否部署成功
           echo "Deploy time: $(date)" > release/wwwroot/deploy-info.txt
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: release/wwwroot
-          branch: gh-pages
+          folder: release/wwwroot # 指定要部署的資料夾
+          branch: gh-pages        # 指定部署到哪個分支
