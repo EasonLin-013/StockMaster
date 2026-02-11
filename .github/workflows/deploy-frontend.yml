@@ -28,20 +28,22 @@ jobs:
         run: |
           cd release/wwwroot
           
-          echo "--- Step 1: Creating .nojekyll ---"
+          # 1. 建立 .nojekyll (確保 GitHub 不會擋掉 _framework 資料夾)
           touch .nojekyll
           
-          echo "--- Step 2: Fixing Base Href ---"
-          # 使用更穩定的 s 替換語法
+          # 2. 修正 index.html 的 base href
+          # 使用 | 作為分隔符號，避免網址中的斜線造成語法錯誤
           sed -i 's|<base href="/" />|<base href="/StockMaster/" />|g' index.html
           
-          echo "--- Step 3: Creating 404.html ---"
-          cp index.html 404.html
+          # 3. 建立「自動轉址版」的 404.html
+          # 這個檔案會讓瀏覽器在 0 秒時自動跳轉回你的專案首頁
+          echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=/StockMaster/"></head></html>' > 404.html
           
-          echo "--- Step 4: Final File Check ---"
+          # 4. 除錯印出：確認檔案清單與 index.html 內容
+          echo "--- Final Directory Listing ---"
           ls -la
           
-          echo "--- Step 5: Content Verification ---"
+          echo "--- Index.html Base Href Check ---"
           grep "base href" index.html
 
       - name: Deploy to GitHub Pages
