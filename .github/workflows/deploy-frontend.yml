@@ -28,18 +28,21 @@ jobs:
         run: |
           cd release/wwwroot
           
-          # 1. 確保 .nojekyll 存在 (解決 _framework 資料夾被擋掉的問題)
+          echo "--- Step 1: Creating .nojekyll ---"
           touch .nojekyll
           
-          # 2. 用最簡單的字串替換，確保沒有多餘縮排或空格
+          echo "--- Step 2: Fixing Base Href ---"
+          # 使用更穩定的 s 替換語法
           sed -i 's|<base href="/" />|<base href="/StockMaster/" />|g' index.html
           
-          # 3. 複製成 404.html (這就是處理你網址 /abcde 的關鍵)
+          echo "--- Step 3: Creating 404.html ---"
           cp index.html 404.html
           
-          # 4. 除錯印出：讓我們在 Actions 紀錄裡確認 index.html 的內容
-          echo "Checking index.html content:"
-          cat index.html | grep base
+          echo "--- Step 4: Final File Check ---"
+          ls -la
+          
+          echo "--- Step 5: Content Verification ---"
+          grep "base href" index.html
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
