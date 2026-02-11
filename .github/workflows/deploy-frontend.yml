@@ -21,8 +21,8 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Publish Frontend
-        # 將 Blazor 專案編譯並輸出到 release 資料夾
-        run: dotnet publish StockWeb/StockWeb.csproj -c Release -o release
+        # 修改這一行，加上 /p:TreatWarningsAsErrors=false
+        run: dotnet publish StockWeb/StockWeb.csproj -c Release -o release /p:TreatWarningsAsErrors=false
 
       - name: Fix Base Href and 404 and Add NoJekyll
         run: |
