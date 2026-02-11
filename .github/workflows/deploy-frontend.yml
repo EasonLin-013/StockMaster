@@ -27,13 +27,19 @@ jobs:
       - name: Fix Base Href and 404 and Add NoJekyll
         run: |
           cd release/wwwroot
+          
+          # 1. 確保 .nojekyll 存在 (解決 _framework 資料夾被擋掉的問題)
           touch .nojekyll
-          sed -i '/<base href=/c\    <base href="/StockMaster/" />' index.html
+          
+          # 2. 用最簡單的字串替換，確保沒有多餘縮排或空格
+          sed -i 's|<base href="/" />|<base href="/StockMaster/" />|g' index.html
+          
+          # 3. 複製成 404.html (這就是處理你網址 /abcde 的關鍵)
           cp index.html 404.html
-          echo "Listing files:"
-          ls -la
-          # 修正這裡的路徑
-          echo "Deploy time: $(date)" > deploy-info.txt
+          
+          # 4. 除錯印出：讓我們在 Actions 紀錄裡確認 index.html 的內容
+          echo "Checking index.html content:"
+          cat index.html | grep base
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
