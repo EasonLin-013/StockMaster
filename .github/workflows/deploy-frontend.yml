@@ -27,22 +27,13 @@ jobs:
       - name: Fix Base Href and 404 and Add NoJekyll
         run: |
           cd release/wwwroot
-          
-          # 1. 建立 .nojekyll
           touch .nojekyll
-          
-          # 2. 強制寫入正確的 base href (注意：這裡直接取代含有 base href 的那一整行)
           sed -i '/<base href=/c\    <base href="/StockMaster/" />' index.html
-          
-          # 3. 複製成 404.html
           cp index.html 404.html
-          
-          # 4. 【除錯用】列出所有檔案，讓我們確定它們在根目錄
-          echo "Listing files in deployment folder:"
+          echo "Listing files:"
           ls -la
-          
-          # 5. 建立部署時間標記，方便確認是否部署成功
-          echo "Deploy time: $(date)" > release/wwwroot/deploy-info.txt
+          # 修正這裡的路徑
+          echo "Deploy time: $(date)" > deploy-info.txt
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
