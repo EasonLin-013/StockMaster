@@ -3,10 +3,10 @@ name: Deploy Frontend to GitHub Pages
 on:
   push:
     branches: [ main ]
-  # 只有當 StockWeb 資料夾或此 yml 檔案變動時才觸發，節省資源
-  paths:
-    - 'StockWeb/**'
-    - '.github/workflows/deploy-frontend.yml'
+    # 只有當 StockWeb 資料夾或此 yml 檔案變動時才觸發，節省資源
+    paths:
+      - 'StockWeb/**'
+      - '.github/workflows/deploy-frontend.yml'
 
 jobs:
   deploy:
