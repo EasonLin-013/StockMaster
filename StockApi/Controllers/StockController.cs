@@ -25,8 +25,16 @@ public class StockController : ControllerBase
         
         try
         {
-            var response = await _httpClient.GetStringAsync(url);
-            return Content(response, "application/json");
+            // 3. 建立 Request 並加入偽裝標頭 (User-Agent)
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+
+            // 4. 發送請求並取得回應
+            var response = await _httpClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+
+            var content = await response.Content.ReadAsStringAsync();
+            return Content(content, "application/json");
         }
         catch (Exception ex)
         {
