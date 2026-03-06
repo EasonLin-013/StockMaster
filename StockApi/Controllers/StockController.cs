@@ -17,18 +17,12 @@ public class StockController : ControllerBase
         try
         {
             var targetCode = codes.Split(',')[0].Trim();
-            
-            // 使用 UTC 時間並往前推 3 天，避免 Render 伺服器時區報錯
-            // 這是最安全的日期寫法
-            var startDate = DateTime.UtcNow.AddDays(-3).ToString("yyyy-MM-dd");
 
-            // 1. 抓取成交價格 (TaiwanStockPrice)
-            var priceUrl = $"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id={targetCode}&start_date={startDate}";
-            
-            // 2. 抓取五檔資料 (TaiwanStockBestBidAsk)
-            var bidAskUrl = $"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockBestBidAsk&data_id={targetCode}&start_date={startDate}";
+            // 不帶 start_date，讓 FinMind 自動回傳最新的一筆資料
+            var priceUrl = $"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id={targetCode}";
+            var bidAskUrl = $"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockBestBidAsk&data_id={targetCode}";
 
-            // 執行請求
+            // 執行並發請求
             var priceTask = _httpClient.GetFromJsonAsync<FinMindPriceResponse>(priceUrl);
             var bidAskTask = _httpClient.GetFromJsonAsync<FinMindBidAskResponse>(bidAskUrl);
 
@@ -40,10 +34,10 @@ public class StockController : ControllerBase
             if (prices == null || !prices.Any()) 
                 return NotFound(new { error = $"無法從 FinMind 取得 {targetCode} 的資料" });
 
+            // 取得最新的成交價與五檔
             var lastPrice = prices.Last();
             var lastBA = bidAsks?.LastOrDefault();
 
-            // 3. 拼裝回傳 (符合 Blazor 前端格式)
             return Ok(new
             {
                 msgArray = new[] {
@@ -55,6 +49,7 @@ public class StockController : ControllerBase
                         l = lastPrice.Min.ToString(),
                         y = lastPrice.Open.ToString(),
                         t = lastPrice.Date,
+                        // 呼叫拼裝方法
                         b = FormatBidAsk(lastBA, "b"),
                         g = FormatBidAsk(lastBA, "g"),
                         a = FormatBidAsk(lastBA, "a"),
