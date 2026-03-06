@@ -8,6 +8,8 @@ namespace StockApi.Controllers;
 public class StockController : ControllerBase
 {
     private readonly HttpClient _httpClient;
+    // 請在此處填入你申請到的 Fugle API Key
+    private const string FugleApiKey = "MDU2NjM1MWItYjA2MS00NmQ5LTkwMWItMjZhNDFhNDFiZDQzIDRhYjJmYTAyLWQ4NjAtNDVjOS1hNzNkLTc3OTg4NzBhMGVmZQ==";
 
     public StockController(HttpClient httpClient) => _httpClient = httpClient;
 
@@ -17,88 +19,65 @@ public class StockController : ControllerBase
         try
         {
             var targetCode = codes.Split(',')[0].Trim();
+            
+            // 富果 API 網址：抓取盤中快照 (Snapshot)
+            var url = $"https://api.fugle.tw/marketdata/v1.0/stock/snapshot/{targetCode}";
 
-            // 不帶 start_date，讓 FinMind 自動回傳最新的一筆資料
-            var priceUrl = $"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id={targetCode}";
-            var bidAskUrl = $"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockBestBidAsk&data_id={targetCode}";
+            // 必須帶上 API Key 標頭
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("X-Fugle-Api-Key", FugleApiKey);
 
-            // 執行並發請求
-            var priceTask = _httpClient.GetFromJsonAsync<FinMindPriceResponse>(priceUrl);
-            var bidAskTask = _httpClient.GetFromJsonAsync<FinMindBidAskResponse>(bidAskUrl);
+            var response = await _httpClient.SendAsync(request);
 
-            await Task.WhenAll(priceTask, bidAskTask);
+            if (!response.IsSuccessStatusCode)
+            {
+                return StatusCode((int)response.StatusCode, new { error = $"富果 API 回報錯誤: {response.StatusCode}" });
+            }
 
-            var prices = priceTask.Result?.Data;
-            var bidAsks = bidAskTask.Result?.Data;
+            var data = await response.Content.ReadFromJsonAsync<FugleSnapshot>();
 
-            if (prices == null || !prices.Any()) 
-                return NotFound(new { error = $"無法從 FinMind 取得 {targetCode} 的資料" });
+            if (data == null) return NotFound();
 
-            // 取得最新的成交價與五檔
-            var lastPrice = prices.Last();
-            var lastBA = bidAsks?.LastOrDefault();
-
-            return Ok(new
+            // 3. 完美拼裝為你的 Blazor 前端格式
+            var result = new
             {
                 msgArray = new[] {
                     new {
-                        c = targetCode,
-                        n = "Stock",
-                        z = lastPrice.Close.ToString(),
-                        h = lastPrice.Max.ToString(),
-                        l = lastPrice.Min.ToString(),
-                        y = lastPrice.Open.ToString(),
-                        t = lastPrice.Date,
-                        // 呼叫拼裝方法
-                        b = FormatBidAsk(lastBA, "b"),
-                        g = FormatBidAsk(lastBA, "g"),
-                        a = FormatBidAsk(lastBA, "a"),
-                        f = FormatBidAsk(lastBA, "f")
+                        c = data.Symbol,           // 代碼
+                        n = data.Name,             // 名稱
+                        z = data.LastTrade.Price.ToString(), // 成交價
+                        h = data.High.ToString(),            // 最高
+                        l = data.Low.ToString(),             // 最低
+                        y = data.PreviousClose.ToString(),   // 昨收
+                        t = data.LastTrade.Time,
+                        // 富果的五檔資料拼裝
+                        b = string.Join("_", data.Bids.Select(x => x.Price)) + "_",
+                        g = string.Join("_", data.Bids.Select(x => x.Size)) + "_",
+                        a = string.Join("_", data.Asks.Select(x => x.Price)) + "_",
+                        f = string.Join("_", data.Asks.Select(x => x.Size)) + "_",
                     }
                 }
-            });
+            };
+
+            return Ok(result);
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = $"API 呼叫失敗: {ex.Message}" });
+            return StatusCode(500, new { error = $"系統異常: {ex.Message}" });
         }
     }
 
-    private string FormatBidAsk(BidAskData? data, string type)
-    {
-        if (data == null) return "-_-_-_-_-";
-        return type switch
-        {
-            "b" => $"{data.BidPrice1}_{data.BidPrice2}_{data.BidPrice3}_{data.BidPrice4}_{data.BidPrice5}_",
-            "g" => $"{data.BidVolume1}_{data.BidVolume2}_{data.BidVolume3}_{data.BidVolume4}_{data.BidVolume5}_",
-            "a" => $"{data.AskPrice1}_{data.AskPrice2}_{data.AskPrice3}_{data.AskPrice4}_{data.AskPrice5}_",
-            "f" => $"{data.AskVolume1}_{data.AskVolume2}_{data.AskVolume3}_{data.AskVolume4}_{data.AskVolume5}_",
-            _ => "-_-_-_-_-"
-        };
+    // --- 富果資料結構 ---
+    public class FugleSnapshot {
+        public string Symbol { get; set; } = "";
+        public string Name { get; set; } = "";
+        public decimal High { get; set; }
+        public decimal Low { get; set; }
+        public decimal PreviousClose { get; set; }
+        public LastTrade LastTrade { get; set; } = new();
+        public List<BidAsk> Bids { get; set; } = new();
+        public List<BidAsk> Asks { get; set; } = new();
     }
-
-    public class FinMindPriceResponse { public List<PriceData>? Data { get; set; } }
-    public class PriceData { 
-        public string Date { get; set; } = ""; 
-        public decimal Open { get; set; } 
-        public decimal Max { get; set; } 
-        public decimal Min { get; set; } 
-        public decimal Close { get; set; } 
-    }
-
-    public class FinMindBidAskResponse { public List<BidAskData>? Data { get; set; } }
-    public class BidAskData {
-        public decimal BidPrice1 { get; set; } public decimal BidPrice2 { get; set; }
-        public decimal BidPrice3 { get; set; } public decimal BidPrice4 { get; set; }
-        public decimal BidPrice5 { get; set; }
-        public int BidVolume1 { get; set; } public int BidVolume2 { get; set; }
-        public int BidVolume3 { get; set; } public int BidVolume4 { get; set; }
-        public int BidVolume5 { get; set; }
-        public decimal AskPrice1 { get; set; } public decimal AskPrice2 { get; set; }
-        public decimal AskPrice3 { get; set; } public decimal AskPrice4 { get; set; }
-        public decimal AskPrice5 { get; set; }
-        public int AskVolume1 { get; set; } public int AskVolume2 { get; set; }
-        public int AskVolume3 { get; set; } public int AskVolume4 { get; set; }
-        public int AskVolume5 { get; set; }
-    }
+    public class LastTrade { public decimal Price { get; set; } public string Time { get; set; } = ""; }
+    public class BidAsk { public decimal Price { get; set; } public int Size { get; set; } }
 }
