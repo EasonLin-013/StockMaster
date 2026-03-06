@@ -18,57 +18,54 @@ public class StockController : ControllerBase
         {
             var targetCode = codes.Split(',')[0].Trim();
             
-            // 嘗試抓取最近三天的資料 (避免週末或剛開盤沒資料的問題)
-            var startDate = DateTime.Now.AddDays(-3).ToString("yyyy-MM-dd");
+            // 使用 UTC 時間並往前推 3 天，避免 Render 伺服器時區報錯
+            // 這是最安全的日期寫法
+            var startDate = DateTime.UtcNow.AddDays(-3).ToString("yyyy-MM-dd");
 
-            // 1. 抓取成交明細 (Tick)
-            var tickUrl = $"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPriceTick&data_id={targetCode}&start_date={startDate}";
+            // 1. 抓取成交價格 (TaiwanStockPrice)
+            var priceUrl = $"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id={targetCode}&start_date={startDate}";
             
-            // 2. 抓取五檔資料 (BestBidAsk)
+            // 2. 抓取五檔資料 (TaiwanStockBestBidAsk)
             var bidAskUrl = $"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockBestBidAsk&data_id={targetCode}&start_date={startDate}";
 
-            // 並行發送
-            var tickTask = _httpClient.GetFromJsonAsync<FinMindTickResponse>(tickUrl);
+            // 執行請求
+            var priceTask = _httpClient.GetFromJsonAsync<FinMindPriceResponse>(priceUrl);
             var bidAskTask = _httpClient.GetFromJsonAsync<FinMindBidAskResponse>(bidAskUrl);
 
-            await Task.WhenAll(tickTask, bidAskTask);
+            await Task.WhenAll(priceTask, bidAskTask);
 
-            var ticks = tickTask.Result?.Data;
+            var prices = priceTask.Result?.Data;
             var bidAsks = bidAskTask.Result?.Data;
 
-            if (ticks == null || !ticks.Any()) 
-                return NotFound(new { error = $"找不到 {targetCode} 的近期成交資料" });
+            if (prices == null || !prices.Any()) 
+                return NotFound(new { error = $"無法從 FinMind 取得 {targetCode} 的資料" });
 
-            // 取得最後一筆成交與五檔
-            var lastTick = ticks.Last();
+            var lastPrice = prices.Last();
             var lastBA = bidAsks?.LastOrDefault();
 
-            // 3. 拼裝成前端需要的格式
-            var result = new
+            // 3. 拼裝回傳 (符合 Blazor 前端格式)
+            return Ok(new
             {
-                msgArray = new List<object> {
+                msgArray = new[] {
                     new {
                         c = targetCode,
-                        n = "股票名稱", // FinMind 此接口不含名稱，可自行補齊
-                        z = lastTick.DealPrice.ToString(),
-                        h = ticks.Max(x => x.DealPrice).ToString(),
-                        l = ticks.Min(x => x.DealPrice).ToString(),
-                        y = ticks.First().DealPrice.ToString(),
-                        t = lastTick.Time,
-                        // 拼裝買賣五檔，確保前端 Split('_') 正常
-                        b = FormatBidAsk(lastBA, "bid_price"),
-                        g = FormatBidAsk(lastBA, "bid_volume"),
-                        a = FormatBidAsk(lastBA, "ask_price"),
-                        f = FormatBidAsk(lastBA, "ask_volume")
+                        n = "Stock",
+                        z = lastPrice.Close.ToString(),
+                        h = lastPrice.Max.ToString(),
+                        l = lastPrice.Min.ToString(),
+                        y = lastPrice.Open.ToString(),
+                        t = lastPrice.Date,
+                        b = FormatBidAsk(lastBA, "b"),
+                        g = FormatBidAsk(lastBA, "g"),
+                        a = FormatBidAsk(lastBA, "a"),
+                        f = FormatBidAsk(lastBA, "f")
                     }
                 }
-            };
-
-            return Ok(result);
+            });
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = $"系統異常: {ex.Message}" });
+            return StatusCode(500, new { error = $"API 呼叫失敗: {ex.Message}" });
         }
     }
 
@@ -77,16 +74,23 @@ public class StockController : ControllerBase
         if (data == null) return "-_-_-_-_-";
         return type switch
         {
-            "bid_price" => $"{data.BidPrice1}_{data.BidPrice2}_{data.BidPrice3}_{data.BidPrice4}_{data.BidPrice5}_",
-            "bid_volume" => $"{data.BidVolume1}_{data.BidVolume2}_{data.BidVolume3}_{data.BidVolume4}_{data.BidVolume5}_",
-            "ask_price" => $"{data.AskPrice1}_{data.AskPrice2}_{data.AskPrice3}_{data.AskPrice4}_{data.AskPrice5}_",
-            "ask_volume" => $"{data.AskVolume1}_{data.AskVolume2}_{data.AskVolume3}_{data.AskVolume4}_{data.AskVolume5}_",
+            "b" => $"{data.BidPrice1}_{data.BidPrice2}_{data.BidPrice3}_{data.BidPrice4}_{data.BidPrice5}_",
+            "g" => $"{data.BidVolume1}_{data.BidVolume2}_{data.BidVolume3}_{data.BidVolume4}_{data.BidVolume5}_",
+            "a" => $"{data.AskPrice1}_{data.AskPrice2}_{data.AskPrice3}_{data.AskPrice4}_{data.AskPrice5}_",
+            "f" => $"{data.AskVolume1}_{data.AskVolume2}_{data.AskVolume3}_{data.AskVolume4}_{data.AskVolume5}_",
             _ => "-_-_-_-_-"
         };
     }
 
-    public class FinMindTickResponse { public List<TickData>? Data { get; set; } }
-    public class TickData { public string Time { get; set; } = ""; public decimal DealPrice { get; set; } }
+    public class FinMindPriceResponse { public List<PriceData>? Data { get; set; } }
+    public class PriceData { 
+        public string Date { get; set; } = ""; 
+        public decimal Open { get; set; } 
+        public decimal Max { get; set; } 
+        public decimal Min { get; set; } 
+        public decimal Close { get; set; } 
+    }
+
     public class FinMindBidAskResponse { public List<BidAskData>? Data { get; set; } }
     public class BidAskData {
         public decimal BidPrice1 { get; set; } public decimal BidPrice2 { get; set; }
