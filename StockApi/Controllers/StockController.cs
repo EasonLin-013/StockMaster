@@ -1,44 +1,30 @@
-using Microsoft.AspNetCore.Mvc;
-using System.Net.Http;
-using System.Linq;
-using System.Threading.Tasks;
-
-namespace StockApi.Controllers;
-
-[ApiController]
-[Route("api/[controller]")]
-public class StockController : ControllerBase
+[HttpGet("{codes}")]
+public async Task<IActionResult> GetStock(string codes)
 {
-    private readonly HttpClient _httpClient;
+    var formattedCodes = string.Join("|", codes.Split(',')
+        .Select(c => $"tse_{c.Trim()}.tw"));
 
-    public StockController(HttpClient httpClient)
+    var url = $"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={formattedCodes}";
+    
+    try
     {
-        _httpClient = httpClient;
+        // 1. 嘗試抓取
+        var response = await _httpClient.GetStringAsync(url);
+        return Content(response, "application/json");
     }
-
-    [HttpGet("{codes}")]
-    public async Task<IActionResult> GetStock(string codes)
+    catch (HttpRequestException e)
     {
-        // 1. 格式化代碼
-        var formattedCodes = string.Join("|", codes.Split(',')
-            .Select(c => $"tse_{c.Trim()}.tw"));
-
-        // 2. 組成原始網址
-        var url = $"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={formattedCodes}";
-        
-        try
-        {
-            // 3. 直接使用 GetStringAsync，不添加任何 HttpRequestMessage 或 Header
-            // 這是你之前可以成功運行的最簡化寫法
-            var response = await _httpClient.GetStringAsync(url);
-
-            // 4. 將抓到的 JSON 直接丟回給前端
-            return Content(response, "application/json");
-        }
-        catch (Exception ex)
-        {
-            // 捕捉任何連線或是逾時錯誤
-            return StatusCode(500, $"Internal server error: {ex.Message}");
-        }
+        // 2. 如果是網路請求錯誤 (例如證交所回傳 403 或 502)
+        return StatusCode(500, $"證交所連線失敗: {e.StatusCode} - {e.Message}");
+    }
+    catch (TaskCanceledException)
+    {
+        // 3. 如果是逾時
+        return StatusCode(500, "證交所回應逾時 (Timeout)");
+    }
+    catch (Exception ex)
+    {
+        // 4. 其他未知的程式錯誤
+        return StatusCode(500, $"發生未預期錯誤: {ex.GetType().Name} - {ex.Message}");
     }
 }
