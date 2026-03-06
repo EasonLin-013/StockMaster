@@ -8,8 +8,6 @@ namespace StockApi.Controllers;
 public class StockController : ControllerBase
 {
     private readonly HttpClient _httpClient;
-    // 建議去 FinMind 官網註冊一個免費用戶並拿到 Token 填在這裡
-    private const string FinMindToken = ""; 
 
     public StockController(HttpClient httpClient) => _httpClient = httpClient;
 
@@ -19,15 +17,17 @@ public class StockController : ControllerBase
         try
         {
             var targetCode = codes.Split(',')[0].Trim();
-            var today = DateTime.Now.ToString("yyyy-MM-dd");
-
-            // 1. 抓取當前成交價 (Tick)
-            var tickUrl = $"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPriceTick&data_id={targetCode}&date={today}";
             
-            // 2. 抓取最佳五檔 (BestBidAsk)
-            var bidAskUrl = $"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockBestBidAsk&data_id={targetCode}&date={today}";
+            // 嘗試抓取最近三天的資料 (避免週末或剛開盤沒資料的問題)
+            var startDate = DateTime.Now.AddDays(-3).ToString("yyyy-MM-dd");
 
-            // 並行發送請求提高效率
+            // 1. 抓取成交明細 (Tick)
+            var tickUrl = $"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPriceTick&data_id={targetCode}&start_date={startDate}";
+            
+            // 2. 抓取五檔資料 (BestBidAsk)
+            var bidAskUrl = $"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockBestBidAsk&data_id={targetCode}&start_date={startDate}";
+
+            // 並行發送
             var tickTask = _httpClient.GetFromJsonAsync<FinMindTickResponse>(tickUrl);
             var bidAskTask = _httpClient.GetFromJsonAsync<FinMindBidAskResponse>(bidAskUrl);
 
@@ -36,29 +36,30 @@ public class StockController : ControllerBase
             var ticks = tickTask.Result?.Data;
             var bidAsks = bidAskTask.Result?.Data;
 
-            if (ticks == null || !ticks.Any()) return NotFound("找不到今日成交資料");
+            if (ticks == null || !ticks.Any()) 
+                return NotFound(new { error = $"找不到 {targetCode} 的近期成交資料" });
 
+            // 取得最後一筆成交與五檔
             var lastTick = ticks.Last();
             var lastBA = bidAsks?.LastOrDefault();
 
-            // 3. 偽裝成證交所原始格式
-            // 證交所格式範例: "b": "價1_價2_價3_價4_價5_", "g": "量1_量2_量3_量4_量5_"
+            // 3. 拼裝成前端需要的格式
             var result = new
             {
                 msgArray = new List<object> {
                     new {
                         c = targetCode,
+                        n = "股票名稱", // FinMind 此接口不含名稱，可自行補齊
                         z = lastTick.DealPrice.ToString(),
                         h = ticks.Max(x => x.DealPrice).ToString(),
                         l = ticks.Min(x => x.DealPrice).ToString(),
                         y = ticks.First().DealPrice.ToString(),
                         t = lastTick.Time,
-                        // 處理買進五檔
-                        b = lastBA != null ? $"{lastBA.BidPrice1}_{lastBA.BidPrice2}_{lastBA.BidPrice3}_{lastBA.BidPrice4}_{lastBA.BidPrice5}_" : "-_-_-_-_-",
-                        g = lastBA != null ? $"{lastBA.BidVolume1}_{lastBA.BidVolume2}_{lastBA.BidVolume3}_{lastBA.BidVolume4}_{lastBA.BidVolume5}_" : "-_-_-_-_-",
-                        // 處理賣出五檔
-                        a = lastBA != null ? $"{lastBA.AskPrice1}_{lastBA.AskPrice2}_{lastBA.AskPrice3}_{lastBA.AskPrice4}_{lastBA.AskPrice5}_" : "-_-_-_-_-",
-                        f = lastBA != null ? $"{lastBA.AskVolume1}_{lastBA.AskVolume2}_{lastBA.AskVolume3}_{lastBA.AskVolume4}_{lastBA.AskVolume5}_" : "-_-_-_-_-",
+                        // 拼裝買賣五檔，確保前端 Split('_') 正常
+                        b = FormatBidAsk(lastBA, "bid_price"),
+                        g = FormatBidAsk(lastBA, "bid_volume"),
+                        a = FormatBidAsk(lastBA, "ask_price"),
+                        f = FormatBidAsk(lastBA, "ask_volume")
                     }
                 }
             };
@@ -67,14 +68,25 @@ public class StockController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = $"抓取失敗: {ex.Message}" });
+            return StatusCode(500, new { error = $"系統異常: {ex.Message}" });
         }
     }
 
-    // --- 資料結構定義 ---
+    private string FormatBidAsk(BidAskData? data, string type)
+    {
+        if (data == null) return "-_-_-_-_-";
+        return type switch
+        {
+            "bid_price" => $"{data.BidPrice1}_{data.BidPrice2}_{data.BidPrice3}_{data.BidPrice4}_{data.BidPrice5}_",
+            "bid_volume" => $"{data.BidVolume1}_{data.BidVolume2}_{data.BidVolume3}_{data.BidVolume4}_{data.BidVolume5}_",
+            "ask_price" => $"{data.AskPrice1}_{data.AskPrice2}_{data.AskPrice3}_{data.AskPrice4}_{data.AskPrice5}_",
+            "ask_volume" => $"{data.AskVolume1}_{data.AskVolume2}_{data.AskVolume3}_{data.AskVolume4}_{data.AskVolume5}_",
+            _ => "-_-_-_-_-"
+        };
+    }
+
     public class FinMindTickResponse { public List<TickData>? Data { get; set; } }
     public class TickData { public string Time { get; set; } = ""; public decimal DealPrice { get; set; } }
-
     public class FinMindBidAskResponse { public List<BidAskData>? Data { get; set; } }
     public class BidAskData {
         public decimal BidPrice1 { get; set; } public decimal BidPrice2 { get; set; }
