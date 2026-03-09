@@ -1,26 +1,23 @@
 var builder = WebApplication.CreateBuilder(args);
 
-// 註冊 CORS 服務，允許跨來源存取
+// 註冊 CORS 服務
 builder.Services.AddCors(options =>
 {
-    options.AddDefaultPolicy(policy =>
+    options.AddPolicy("AllowAll", policy =>
     {
         policy.AllowAnyOrigin()
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowAnyHeader();
     });
 });
 
 builder.Services.AddControllers();
-builder.Services.AddHttpClient();
+builder.Services.AddHttpClient(); // 確保有註冊 HttpClient
 
 var app = builder.Build();
 
-// 必須放在這裡：在 Routing 之後，Authorization 之前
-app.UseRouting();
-app.UseCors(); 
-app.UseAuthorization();
+// 啟用 CORS (必須放在 MapControllers 之前)
+app.UseCors("AllowAll");
 
 app.MapControllers();
-
 app.Run();
