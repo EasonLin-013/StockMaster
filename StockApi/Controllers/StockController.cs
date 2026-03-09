@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Net;
+using System.Web; // 用於 HttpUtility.UrlEncode
 
 namespace StockAPI.Controllers
 {
@@ -8,10 +9,6 @@ namespace StockAPI.Controllers
     public class StockController : ControllerBase
     {
         private readonly IHttpClientFactory _httpClientFactory;
-        
-        // 使用 static 確保所有 Request 共用 Proxy 池
-        private static List<string> _proxyPool = new();
-        private readonly Random _random = new();
 
         public StockController(IHttpClientFactory httpClientFactory)
         {
@@ -21,110 +18,49 @@ namespace StockAPI.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> Get(string id)
         {
-            // 1. 如果 Proxy 池太少，嘗試更新
-            if (_proxyPool.Count < 5)
-            {
-                await RefreshProxyPool();
-            }
-
-            // 2. 執行抓取邏輯
-            string jsonResult = await FetchWithRetry(id, 0);
-
-            if (string.IsNullOrEmpty(jsonResult))
-            {
-                // 如果 Proxy 方案全滅，這裡可以作為最後防線回傳錯誤，或導向備援 API
-                return StatusCode(500, new { message = "Proxy 連線全數失敗，伺服器 IP 可能遭封鎖，請稍後再試" });
-            }
-
-            return Content(jsonResult, "application/json");
-        }
-
-        private async Task RefreshProxyPool()
-        {
             try
             {
-                Console.WriteLine("--- 啟動 Proxy 清單更新程序 ---");
                 var client = _httpClientFactory.CreateClient();
-                
-                // 來源 A: ProxyScrape (放寬條件至 anonymity=all 以確保數量)
-                string sourceA = "https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=10000&country=all&ssl=yes&anonymity=all";
-                
-                var response = await client.GetStringAsync(sourceA);
-                var list = ParseProxyList(response);
+                // 必須模擬真實瀏覽器，否則 Web Proxy 可能會拒絕服務
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
-                // 來源 B: 如果 A 失敗或數量太少，嘗試備援來源
-                if (list.Count < 10)
-                {
-                    Console.WriteLine("來源 A 供應不足，嘗試來源 B (Proxy-List.download)...");
-                    string sourceB = "https://www.proxy-list.download/api/v1/get?type=https";
-                    var responseB = await client.GetStringAsync(sourceB);
-                    list.AddRange(ParseProxyList(responseB));
-                }
+                // 1. 準備目標網址
+                string targetUrl = $"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{id}.tw";
+                string encodedUrl = HttpUtility.UrlEncode(targetUrl);
 
-                _proxyPool = list.Distinct().ToList();
-                Console.WriteLine($"更新完成！目前 Proxy 池共計: {_proxyPool.Count} 個可用 IP。");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"更新清單時發生非預期錯誤: {ex.Message}");
-            }
-        }
+                // 2. 構造 FilterBypass 請求 (參數 k 是目標網址)
+                // b=4 代表伺服器節點，可以根據穩定度調整
+                string proxyUrl = $"https://www.filterbypass.me/s.php?k={encodedUrl}&b=4";
 
-        private List<string> ParseProxyList(string rawData)
-        {
-            return rawData.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
-                          .Select(p => p.Trim())
-                          .Where(p => !string.IsNullOrEmpty(p) && p.Contains(":"))
-                          .ToList();
-        }
+                Console.WriteLine($"[Stock:{id}] 透過 FilterBypass 發起請求...");
 
-        private async Task<string> FetchWithRetry(string stockId, int retryCount)
-        {
-            // 最大重試次數設定為 10 次，應對免費 Proxy 的高失效率
-            if (retryCount >= 10 || !_proxyPool.Any())
-            {
-                Console.WriteLine($"[Stock:{stockId}] 重試已達上限，無法取得資料。");
-                return null;
-            }
-
-            string selectedProxy = _proxyPool[_random.Next(_proxyPool.Count)];
-            
-            var handler = new HttpClientHandler
-            {
-                Proxy = new WebProxy(selectedProxy),
-                UseProxy = true,
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-            };
-
-            // 縮短 Timeout (3秒)，失敗快一點換下一個，體驗會比較好
-            using var proxyClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(3) };
-
-            try
-            {
-                string url = $"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{stockId}.tw";
-                proxyClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-
-                var response = await proxyClient.GetAsync(url);
+                var response = await client.GetAsync(proxyUrl);
                 
                 if (response.IsSuccessStatusCode)
                 {
                     var content = await response.Content.ReadAsStringAsync();
-                    
-                    // 驗證是否為證交所原始 JSON
-                    if (content.Contains("msgArray"))
+
+                    // 3. 關鍵：從 HTML 內容中提取 JSON
+                    // 證交所資料開頭固定是 {"msgArray"
+                    int jsonStart = content.IndexOf("{\"msgArray\"");
+                    if (jsonStart >= 0)
                     {
-                        Console.WriteLine($"[Stock:{stockId}] 成功！透過 Proxy: {selectedProxy}");
-                        return content;
+                        // 找到 JSON 的結尾
+                        int jsonEnd = content.LastIndexOf("}");
+                        string pureJson = content.Substring(jsonStart, jsonEnd - jsonStart + 1);
+                        
+                        Console.WriteLine($"[Stock:{id}] 成功提取資料");
+                        return Content(pureJson, "application/json");
                     }
+                    
+                    Console.WriteLine($"[Stock:{id}] 回傳內容中找不到 JSON (可能遇到驗證碼)");
                 }
-                throw new Exception("無效回應或非 JSON 內容");
+
+                return StatusCode(500, new { message = "透過 FilterBypass 抓取失敗" });
             }
             catch (Exception ex)
             {
-                // 失敗時從池中移除，並立即重試
-                _proxyPool.Remove(selectedProxy);
-                Console.WriteLine($"[Stock:{stockId}] Proxy {selectedProxy} 失敗 (剩餘預選:{_proxyPool.Count}): {ex.Message}");
-                return await FetchWithRetry(stockId, retryCount + 1);
+                return StatusCode(500, new { message = ex.Message });
             }
         }
     }
