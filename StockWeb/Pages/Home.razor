@@ -31,7 +31,7 @@
             </div>
             @if (!string.IsNullOrEmpty(statusMessage))
             {
-                <div class="mt-2" style="font-size: 12px; color: #666;">@statusMessage</div>
+                <div class="mt-2" style="font-size: 12px; color: #666; font-family: monospace;">> @statusMessage</div>
             }
         </div>
     </div>
@@ -120,10 +120,10 @@
     private string statusMessage = "";
     private List<StockDisplay> stockList = new();
     
-    // 用於同步資料回 Render
+    // 你的 Render 後端 API
     private string renderApiUrl = "https://stockmaster-te7f.onrender.com/api/stock/manual-update";
     
-    // 直接呼叫 Google Apps Script 網址 (繞過 Render 機房封鎖)
+    // Google Apps Script 網址
     private string gasBaseUrl = "https://script.google.com/macros/s/AKfycbyI-FVA1NPcxwrREPtd_FeuHEDAwZ0--YsHj1yZ0iPa5wLwEYjxohNVfuYUs_jYQ0Rk4g/exec?id=";
 
     private void ToggleMode() => isSecretMode = !isSecretMode;
@@ -132,53 +132,72 @@
     {
         if (string.IsNullOrWhiteSpace(stockInput)) return;
         loading = true;
-        statusMessage = "📡 正在請求安全傳輸通道...";
+        statusMessage = "CONNECTING_TO_PROXY...";
         stockList.Clear();
         var codes = stockInput.Replace(" ", "").TrimEnd(',');
 
         try
         {
-            // 直接從瀏覽器端呼叫 Google (CORS 已開啟)
-            var response = await Http.GetFromJsonAsync<JsonElement>($"{gasBaseUrl}{codes}");
-            
-            if (response.TryGetProperty("msgArray", out var msgArray))
+            // 使用 HttpRequestMessage 手動控制連線，這對 CORS 較穩定
+            var request = new HttpRequestMessage(HttpMethod.Get, $"{gasBaseUrl}{codes}");
+            var response = await Http.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
             {
-                foreach (var item in msgArray.EnumerateArray())
-                {
-                    stockList.Add(new StockDisplay {
-                        Symbol = item.GetProperty("c").GetString(),
-                        CurrentPrice = item.GetProperty("z").GetString() ?? "---",
-                        High = item.GetProperty("h").GetString(),
-                        Low = item.GetProperty("l").GetString(),
-                        YesterdayClose = item.GetProperty("y").GetString(),
-                        Time = item.GetProperty("t").GetString(),
-                        BuyPrices = item.GetProperty("b").GetString()?.Split('_'),
-                        BuyQty = item.GetProperty("g").GetString()?.Split('_'),
-                        SellPrices = item.GetProperty("a").GetString()?.Split('_'),
-                        SellQty = item.GetProperty("f").GetString()?.Split('_')
-                    });
-                }
-                statusMessage = "✅ 數據解碼成功";
+                var content = await response.Content.ReadAsStringAsync();
                 
-                // 順便把資料同步回 Render 存檔
-                _ = Task.Run(() => SyncToRender(response));
-            }
-            else
-            {
-                statusMessage = "⚠️ 自動抓取失敗，請點擊書籤手動同步。";
+                // 檢查是否拿到正確 JSON
+                if (content.Contains("msgArray"))
+                {
+                    using var doc = JsonDocument.Parse(content);
+                    var root = doc.RootElement;
+                    
+                    if (root.TryGetProperty("msgArray", out var msgArray))
+                    {
+                        foreach (var item in msgArray.EnumerateArray())
+                        {
+                            stockList.Add(new StockDisplay {
+                                Symbol = item.GetProperty("c").GetString(),
+                                CurrentPrice = item.GetProperty("z").GetString() ?? "---",
+                                High = item.GetProperty("h").GetString(),
+                                Low = item.GetProperty("l").GetString(),
+                                YesterdayClose = item.GetProperty("y").GetString(),
+                                Time = item.GetProperty("t").GetString(),
+                                BuyPrices = item.GetProperty("b").GetString()?.Split('_'),
+                                BuyQty = item.GetProperty("g").GetString()?.Split('_'),
+                                SellPrices = item.GetProperty("a").GetString()?.Split('_'),
+                                SellQty = item.GetProperty("f").GetString()?.Split('_')
+                            });
+                        }
+                        statusMessage = "DATA_DECRYPTED_SUCCESS";
+                        
+                        // 順便同步回 Render (使用 Task.Run 避免阻塞 UI)
+                        _ = Task.Run(() => SyncToRender(content));
+                    }
+                }
+                else
+                {
+                    statusMessage = "ERROR: PROXY_REJECTED (CORS/WAF)";
+                }
             }
         }
         catch (Exception ex) 
         { 
-            statusMessage = "❌ 連線異常，請檢查網路或使用書籤。";
-            Console.WriteLine($"Error: {ex.Message}"); 
+            statusMessage = "ERR_ACCESS_DENIED_BY_CORS";
+            Console.WriteLine($"CORS_DEBUG: {ex.Message}"); 
         }
         finally { loading = false; }
     }
 
-    private async Task SyncToRender(JsonElement data)
+    private async Task SyncToRender(string jsonRaw)
     {
-        try { await Http.PostAsJsonAsync(renderApiUrl, data); } catch { }
+        try 
+        { 
+            // 將原始 JSON 字串解析後傳給後端
+            var jsonElement = JsonSerializer.Deserialize<JsonElement>(jsonRaw);
+            await Http.PostAsJsonAsync(renderApiUrl, jsonElement); 
+        } 
+        catch { }
     }
 
     private string GetIdx(string[]? arr, int i) => (arr != null && arr.Length > i && !string.IsNullOrEmpty(arr[i])) ? arr[i] : "-";
