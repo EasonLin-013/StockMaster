@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 @using System.Text.Json
 @inject HttpClient Http
 
@@ -29,6 +29,10 @@
                     else { <span>@(isSecretMode ? "EXEC" : "查詢")</span> }
                 </button>
             </div>
+            @if (!string.IsNullOrEmpty(statusMessage))
+            {
+                <div class="mt-2" style="font-size: 12px; color: #666;">@statusMessage</div>
+            }
         </div>
     </div>
 
@@ -42,8 +46,7 @@
                     <span style="font-size: 0.65rem; opacity: 0.8;">@s.Time</span>
                 </div>
                 
-                @* 關鍵：移除 min-width，強制表格自適應 *@
-                <div class="table-responsive" style="overflow-x: hidden;"> @* 隱藏捲軸，強制內容塞入 *@
+                <div class="table-responsive" style="overflow-x: hidden;">
                     <table class="table table-sm table-bordered text-center align-middle mb-0 custom-table">
                         <thead class="table-light">
                             <tr>
@@ -100,53 +103,28 @@
 </div>
 
 <style>
-    /* 強制寬度佈局 */
-    .custom-container {
-        width: 98% !important;
-        padding-left: 1% !important;
-        padding-right: 1% !important;
-        max-width: 100% !important;
-    }
-
-    /* 表格內部擠壓優化 */
-    .custom-table {
-        table-layout: fixed; /* 強制固定比例，防止欄位被撐開 */
-        width: 100%;
-        font-size: 0.75rem; /* 稍微縮小字體 */
-    }
-
-    .custom-table th, .custom-table td {
-        padding: 4px 0px !important; /* 移除水平 Padding */
-        overflow: hidden;
-        white-space: nowrap;
-    }
-
-    .price-text {
-        font-weight: bold;
-        letter-spacing: -0.5px; /* 緊縮字距 */
-    }
-
-    .qty-text {
-        font-size: 0.6rem;
-        color: #999;
-    }
-
-    /* 頁尾數據優化 */
+    .custom-container { width: 98% !important; padding: 0 1% !important; max-width: 100% !important; }
+    .custom-table { table-layout: fixed; width: 100%; font-size: 0.75rem; }
+    .custom-table th, .custom-table td { padding: 4px 0px !important; overflow: hidden; white-space: nowrap; }
+    .price-text { font-weight: bold; letter-spacing: -0.5px; }
+    .qty-text { font-size: 0.6rem; color: #999; }
     .footer-stats .f-label { font-size: 0.6rem; color: #aaa; margin-bottom: -2px; }
     .footer-stats .f-val { font-size: 0.8rem; }
-
-    @@media (min-width: 1200px) {
-        .custom-container { max-width: 1000px !important; }
-        .custom-table { font-size: 0.85rem; }
-    }
+    @@media (min-width: 1200px) { .custom-container { max-width: 1000px !important; } .custom-table { font-size: 0.85rem; } }
 </style>
 
 @code {
     private string stockInput = "";
     private bool loading = false;
     private bool isSecretMode = true; 
+    private string statusMessage = "";
     private List<StockDisplay> stockList = new();
-    private string apiBaseUrl = "https://stockmaster-te7f.onrender.com/api/stock/";
+    
+    // 用於同步資料回 Render
+    private string renderApiUrl = "https://stockmaster-te7f.onrender.com/api/stock/manual-update";
+    
+    // 直接呼叫 Google Apps Script 網址 (繞過 Render 機房封鎖)
+    private string gasBaseUrl = "https://script.google.com/macros/s/AKfycbyI-FVA1NPcxwrREPtd_FeuHEDAwZ0--YsHj1yZ0iPa5wLwEYjxohNVfuYUs_jYQ0Rk4g/exec?id=";
 
     private void ToggleMode() => isSecretMode = !isSecretMode;
 
@@ -154,12 +132,15 @@
     {
         if (string.IsNullOrWhiteSpace(stockInput)) return;
         loading = true;
+        statusMessage = "📡 正在請求安全傳輸通道...";
         stockList.Clear();
         var codes = stockInput.Replace(" ", "").TrimEnd(',');
 
         try
         {
-            var response = await Http.GetFromJsonAsync<JsonElement>($"{apiBaseUrl}{codes}");
+            // 直接從瀏覽器端呼叫 Google (CORS 已開啟)
+            var response = await Http.GetFromJsonAsync<JsonElement>($"{gasBaseUrl}{codes}");
+            
             if (response.TryGetProperty("msgArray", out var msgArray))
             {
                 foreach (var item in msgArray.EnumerateArray())
@@ -177,10 +158,27 @@
                         SellQty = item.GetProperty("f").GetString()?.Split('_')
                     });
                 }
+                statusMessage = "✅ 數據解碼成功";
+                
+                // 順便把資料同步回 Render 存檔
+                _ = Task.Run(() => SyncToRender(response));
+            }
+            else
+            {
+                statusMessage = "⚠️ 自動抓取失敗，請點擊書籤手動同步。";
             }
         }
-        catch (Exception ex) { Console.WriteLine($"Error: {ex.Message}"); }
+        catch (Exception ex) 
+        { 
+            statusMessage = "❌ 連線異常，請檢查網路或使用書籤。";
+            Console.WriteLine($"Error: {ex.Message}"); 
+        }
         finally { loading = false; }
+    }
+
+    private async Task SyncToRender(JsonElement data)
+    {
+        try { await Http.PostAsJsonAsync(renderApiUrl, data); } catch { }
     }
 
     private string GetIdx(string[]? arr, int i) => (arr != null && arr.Length > i && !string.IsNullOrEmpty(arr[i])) ? arr[i] : "-";
