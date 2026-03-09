@@ -10,46 +10,55 @@
         <article class="content px-4">
             @Body
 
-            @* --- 以下為新增的手動同步工具區 --- *@
+            @* --- 修改後的手動同步工具區 --- *@
             <hr style="margin-top: 50px;" />
             <div class="card border-info mx-auto" style="max-width: 500px; background-color: #f8f9fa;">
                 <div class="card-header bg-info text-white font-weight-bold">
-                    🔄 數據同步工具 (解決伺服器 502 封鎖)
+                    🔄 數據同步工具
                 </div>
                 <div class="card-body text-center">
-                    <p class="small text-muted">
-                        當自動抓取失效時，請利用此工具透過您的手機/電腦 IP 進行同步。
-                    </p>
-                    
                     <div class="mb-3">
+                        <label class="small font-weight-bold">請輸入欲同步的股票代號：</label>
+                        <div class="input-group input-group-sm mb-2" style="max-width: 200px; margin: 0 auto;">
+                            <input type="text" class="form-control" @bind="stockId" placeholder="例如: 2330" />
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2 mb-3">
+                        <button class="btn btn-outline-primary btn-sm" @onclick="OpenTwseData">
+                            第一步：開啟 @(string.IsNullOrEmpty(stockId) ? "" : stockId) 證交所原始 JSON
+                        </button>
+                    </div>
+
+                    <div class="mb-3 border-top pt-3">
+                        <p class="x-small text-muted mb-1" style="font-size: 0.75rem;">第二步：在新分頁點擊下方書籤</p>
                         <a class="btn btn-warning btn-sm font-weight-bold" 
                            href="javascript:(function(){var t=document.body.innerText;if(t.indexOf('msgArray')>-1){fetch('https://stockmaster-te7f.onrender.com/api/stock/manual-update',{method:'POST',headers:{'Content-Type':'application/json'},body:t}).then(e=>{if(e.ok)alert('✅ 同步成功！');else alert('❌ 同步失敗')}).catch(e=>alert('錯誤: '+e))}else alert('請先開啟證交所JSON頁面！')})();"
                            onclick="return false;">
                            【同步至 StockMaster】
                         </a>
-                        <div class="x-small text-secondary mt-1" style="font-size: 0.75rem;">
-                            (電腦請拖曳至書籤列；手機請長按加入書籤)
-                        </div>
                     </div>
-
-                    <div class="d-grid gap-2">
-                        <button class="btn btn-outline-primary btn-sm" @onclick="OpenTwseData">
-                            第一步：開啟證交所原始 JSON
-                        </button>
-                    </div>
-                    <p class="mt-2 mb-0 small text-danger">開啟新分頁後，點擊剛才存的「書籤」即可同步。</p>
+                    
+                    <p class="mt-2 mb-0 small text-danger">同步成功後，回到網頁按查詢即可看到資料。</p>
                 </div>
             </div>
-            @* --- 以上為新增內容 --- *@
-
         </article>
     </main>
 </div>
 
 @code {
+    private string stockId { get; set; } = "2330"; // 預設值
+
     private async Task OpenTwseData()
     {
-        // 預設開啟 2330 資料頁面
-        await JSRuntime.InvokeVoidAsync("window.open", "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_2330.tw", "_blank");
+        if (string.IsNullOrWhiteSpace(stockId))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "請先輸入股票代號！");
+            return;
+        }
+
+        // 動態構造網址，這會根據你在輸入框打的代號而改變
+        string url = $"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{stockId}.tw";
+        await JSRuntime.InvokeVoidAsync("window.open", url, "_blank");
     }
 }
